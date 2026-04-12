@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
+import { sendPush } from '@/lib/notify';
 
 const MAIN_TABS = [
   { id: 'mua_hang', label: 'Mua hàng' },
@@ -69,10 +70,12 @@ export default function Proposals({ userId, userName, members, department, isDir
     for (const aid of approverIds) {
       await supabase.from('proposal_approvers').insert({ proposal_id: p.id, user_id: aid });
       await supabase.from('notifications').insert({ user_id: aid, type: 'approval_request', title: 'Đề xuất cần duyệt', message: `${userName}: "${title}"`, proposal_id: p.id });
+      sendPush(aid, '📝 Đề xuất cần duyệt', `${userName}: "${title}"`, { url: '/dashboard', tag: 'proposal-' + p.id });
     }
     for (const wid of watcherIds) {
       await supabase.from('proposal_watchers').insert({ proposal_id: p.id, user_id: wid });
       await supabase.from('notifications').insert({ user_id: wid, type: 'info', title: 'Đề xuất để theo dõi', message: `${userName}: "${title}"`, proposal_id: p.id });
+      sendPush(wid, '👁 Đề xuất theo dõi', `${userName}: "${title}"`, { url: '/dashboard', tag: 'proposal-w-' + p.id });
     }
     for (const f of files) {
       const path = `proposals/${p.id}/${Date.now()}_${f.name}`;
@@ -94,6 +97,14 @@ export default function Proposals({ userId, userName, members, department, isDir
     const approved = all?.every(a => a.status === 'approved');
     if (done) await supabase.from('proposals').update({ status: approved ? 'approved' : 'rejected', updated_at: new Date().toISOString() }).eq('id', pid);
     else await supabase.from('proposals').update({ status: 'partial', updated_at: new Date().toISOString() }).eq('id', pid);
+    // Push notify the creator
+    const proposal = proposals.find(p => p.id === pid);
+    if (proposal && proposal.created_by !== uid) {
+      const approverName = members.find(m => m.id === uid)?.name || '';
+      const statusText = action === 'approved' ? '✅ đã duyệt' : '❌ đã từ chối';
+      sendPush(proposal.created_by, `Đề xuất ${statusText}`, `${approverName} ${statusText}: "${proposal.title}"`, { url: '/dashboard', tag: 'approval-' + pid });
+      await supabase.from('notifications').insert({ user_id: proposal.created_by, type: action === 'approved' ? 'approved' : 'rejected', title: `Đề xuất ${statusText}`, message: `${approverName} ${statusText}: "${proposal.title}"`, proposal_id: pid });
+    }
     toast(action === 'approved' ? 'Đã duyệt!' : 'Đã từ chối', 'success'); fetchAll();
   }
 

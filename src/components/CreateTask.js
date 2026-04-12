@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
+import { sendPush } from '@/lib/notify';
 
 export default function CreateTask({ members, userId, userName, department, taskGroups, onCreated }) {
   const [title, setTitle] = useState('');
@@ -34,12 +35,14 @@ export default function CreateTask({ members, userId, userName, department, task
       await supabase.from('task_assignees').insert({ task_id: task.id, user_id: uid });
       if (uid !== userId) {
         await supabase.from('notifications').insert({ user_id: uid, type: 'new_task', title: 'Task mới', message: `${userName} giao: "${title}"`, task_id: task.id });
+        sendPush(uid, '📋 Task mới', `${userName} giao: "${title}"`, { url: '/dashboard', tag: 'task-' + task.id });
       }
     }
     // Watchers
     for (const uid of watchers) {
       await supabase.from('task_watchers').insert({ task_id: task.id, user_id: uid });
       await supabase.from('notifications').insert({ user_id: uid, type: 'info', title: 'Bạn được thêm theo dõi', message: `Task: "${title}"`, task_id: task.id });
+      sendPush(uid, '👁 Theo dõi task', `Bạn được thêm theo dõi: "${title}"`, { url: '/dashboard', tag: 'watch-' + task.id });
     }
     // Files
     for (const f of files) {

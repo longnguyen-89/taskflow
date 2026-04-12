@@ -1,8 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/check-deadlines?key=${CRON_SECRET}",
-      "schedule": "*/30 * * * *"
-    }
-  ]
-}
+{"crons":[{"path":"/api/check-deadlines","schedule":"0 0 * * *"}]} 

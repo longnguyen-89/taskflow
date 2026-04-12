@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
+import { sendPush } from '@/lib/notify';
 
 const ST = { todo: { l: 'Chưa làm', c: '#6b7280' }, doing: { l: 'Đang thực hiện', c: '#2563eb' }, done: { l: 'Hoàn thành', c: '#16a34a' }, waiting: { l: 'Chờ phản hồi', c: '#d97706' } };
 const PR = { high: { l: 'Cao', c: '#dc2626' }, medium: { l: 'TB', c: '#d97706' }, low: { l: 'Thấp', c: '#2563eb' } };
@@ -23,6 +24,12 @@ export default function TaskList({ tasks, members, isAdmin, userId, onRefresh })
     const u = { status: s, updated_at: new Date().toISOString() };
     if (s === 'done') u.completed_at = new Date().toISOString();
     await supabase.from('tasks').update(u).eq('id', tid);
+    // Push notify task creator when status changes
+    const task = tasks.find(t => t.id === tid);
+    if (task && task.created_by !== userId) {
+      const userName = members.find(m => m.id === userId)?.name || '';
+      sendPush(task.created_by, `📋 ${ST[s].l}`, `${userName} chuyển "${task.title}" → ${ST[s].l}`, { url: '/dashboard', tag: 'status-' + tid });
+    }
     toast(ST[s].l, 'success'); onRefresh();
   }
   function toggle(tid) { if (expanded === tid) { setExpanded(null); return; } setExpanded(tid); if (!comments[tid]) loadComments(tid); }

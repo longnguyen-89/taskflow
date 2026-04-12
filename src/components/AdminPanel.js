@@ -389,10 +389,10 @@ function AppearanceSection() {
   const [loginBgUrl, setLoginBgUrl] = useState('');
 
   const PRESET_THEMES = [
-    { name: 'Coco Spa (mặc định)', primary: '#2D5A3D', bg: '' },
+    { name: 'CCE (mặc định)', primary: '#2D5A3D', bg: '' },
     { name: 'Lễ 30/4 - Cờ Việt Nam', primary: '#DA251D', bg: '', banner: 'Chúc mừng ngày Giải phóng 30/4!' , bannerColor: '#DA251D' },
     { name: 'Tết Nguyên Đán', primary: '#B8860B', bg: '', banner: 'Chúc Mừng Năm Mới!' , bannerColor: '#B8860B' },
-    { name: 'Sinh nhật Công ty', primary: '#8B5CF6', bg: '', banner: 'Happy Birthday Coco Group!' , bannerColor: '#8B5CF6' },
+    { name: 'Sinh nhật Công ty', primary: '#8B5CF6', bg: '', banner: 'Happy Birthday CCE Group!' , bannerColor: '#8B5CF6' },
     { name: 'Giáng Sinh', primary: '#DC2626', bg: '', banner: 'Merry Christmas!' , bannerColor: '#166534' },
     { name: 'Quốc tế Phụ nữ 8/3', primary: '#EC4899', bg: '', banner: 'Happy Women\'s Day 8/3!' , bannerColor: '#EC4899' },
   ];

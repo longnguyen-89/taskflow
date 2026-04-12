@@ -23,7 +23,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #F5F1EB 0%, #E8E0D4 50%, #F5F1EB 100%)' }}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          {/* Logo inspired by Coco Spa brand */}
+          {/* Logo */}
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4" style={{ background: 'linear-gradient(135deg, #2D5A3D 0%, #4A7C5C 100%)' }}>
             <svg className="w-8 h-8 text-amber-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
               <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9z" />
@@ -32,7 +32,7 @@ export default function LoginPage() {
             </svg>
           </div>
           <h1 className="font-display text-2xl font-bold" style={{ color: '#2D5A3D' }}>CCE - TasksFlow</h1>
-          <p className="text-sm mt-1" style={{ color: '#8B7355' }}>Coco Spa · Healing & Relax</p>
+          <p className="text-xs mt-1" style={{ color: '#8B7355' }}>Bản quyền @Coco Group</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-7">
