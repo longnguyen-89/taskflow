@@ -32,15 +32,18 @@ export function AuthProvider({ children }) {
   }
 
   async function createUser(email, password, name, role, position, department) {
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, role, position, department } } });
-    if (error) return { error };
-    if (data.user) {
-      await supabase.from('profiles').upsert({
-        id: data.user.id, email, name, role, position, department,
-        avatar_color: COLORS[Math.floor(Math.random() * COLORS.length)],
+    try {
+      const res = await fetch('/api/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name, role, position, department }),
       });
+      const data = await res.json();
+      if (!res.ok) return { error: { message: data.error } };
+      return { data };
+    } catch (err) {
+      return { error: { message: err.message } };
     }
-    return { data, error };
   }
 
   async function signOut() { await supabase.auth.signOut(); }
