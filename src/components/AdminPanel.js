@@ -17,6 +17,7 @@ const MENU = [
   { id: 'groups', label: 'Nhóm công việc', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
   { id: 'categories', label: 'Loại đề xuất', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z' },
   { id: 'reports', label: 'Báo cáo', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+  { id: 'appearance', label: 'Giao diện', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01' },
 ];
 
 export default function AdminPanel({ members, department, onRefresh }) {
@@ -44,6 +45,7 @@ export default function AdminPanel({ members, department, onRefresh }) {
       {section === 'groups' && <GroupsSection department={department} onRefresh={onRefresh} />}
       {section === 'categories' && <CategoriesSection />}
       {section === 'reports' && <ReportsSection department={department} />}
+      {section === 'appearance' && <AppearanceSection />}
     </div>
   );
 }
@@ -369,6 +371,182 @@ function ReportsSection({ department }) {
           <span className="text-sm font-bold w-12 text-right" style={{ color: taskRate >= 70 ? '#16a34a' : taskRate >= 40 ? '#d97706' : '#dc2626' }}>{taskRate}%</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AppearanceSection() {
+  const [settings, setSettings] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [bgFile, setBgFile] = useState(null);
+  const [loginBgFile, setLoginBgFile] = useState(null);
+  const [bannerText, setBannerText] = useState('');
+  const [bannerColor, setBannerColor] = useState('#2D5A3D');
+  const [bannerEnabled, setBannerEnabled] = useState(false);
+  const [primaryColor, setPrimaryColor] = useState('#2D5A3D');
+  const [bgUrl, setBgUrl] = useState('');
+  const [loginBgUrl, setLoginBgUrl] = useState('');
+
+  const PRESET_THEMES = [
+    { name: 'Coco Spa (mặc định)', primary: '#2D5A3D', bg: '' },
+    { name: 'Lễ 30/4 - Cờ Việt Nam', primary: '#DA251D', bg: '', banner: 'Chúc mừng ngày Giải phóng 30/4!' , bannerColor: '#DA251D' },
+    { name: 'Tết Nguyên Đán', primary: '#B8860B', bg: '', banner: 'Chúc Mừng Năm Mới!' , bannerColor: '#B8860B' },
+    { name: 'Sinh nhật Công ty', primary: '#8B5CF6', bg: '', banner: 'Happy Birthday Coco Group!' , bannerColor: '#8B5CF6' },
+    { name: 'Giáng Sinh', primary: '#DC2626', bg: '', banner: 'Merry Christmas!' , bannerColor: '#166534' },
+    { name: 'Quốc tế Phụ nữ 8/3', primary: '#EC4899', bg: '', banner: 'Happy Women\'s Day 8/3!' , bannerColor: '#EC4899' },
+  ];
+
+  useEffect(() => { loadSettings(); }, []);
+
+  async function loadSettings() {
+    const { data } = await supabase.from('app_settings').select('*').eq('key', 'appearance').single();
+    if (data) {
+      const v = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      setSettings(v);
+      setPrimaryColor(v.primaryColor || '#2D5A3D');
+      setBgUrl(v.bgUrl || '');
+      setLoginBgUrl(v.loginBgUrl || '');
+      setBannerText(v.bannerText || '');
+      setBannerColor(v.bannerColor || '#2D5A3D');
+      setBannerEnabled(v.bannerEnabled || false);
+    }
+  }
+
+  async function saveSettings() {
+    setSaving(true);
+    const value = { primaryColor, bgUrl, loginBgUrl, bannerText, bannerColor, bannerEnabled };
+    await supabase.from('app_settings').upsert({ key: 'appearance', value }, { onConflict: 'key' });
+    toast('Đã lưu giao diện!', 'success');
+    setSaving(false);
+    window.location.reload();
+  }
+
+  async function uploadBg(file, type) {
+    if (!file) return;
+    setUploading(true);
+    const path = `appearance/${type}_${Date.now()}_${file.name}`;
+    const { error } = await supabase.storage.from('attachments').upload(path, file);
+    if (error) { toast('Lỗi upload: ' + error.message, 'error'); setUploading(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(path);
+    if (type === 'bg') setBgUrl(publicUrl);
+    else setLoginBgUrl(publicUrl);
+    toast('Đã upload ảnh!', 'success');
+    setUploading(false);
+  }
+
+  function applyPreset(preset) {
+    setPrimaryColor(preset.primary);
+    if (preset.banner) { setBannerText(preset.banner); setBannerEnabled(true); }
+    if (preset.bannerColor) setBannerColor(preset.bannerColor);
+    toast('Đã áp dụng theme: ' + preset.name, 'info');
+  }
+
+  return (
+    <div>
+      <h3 className="font-semibold text-sm mb-4">Tùy chỉnh giao diện</h3>
+
+      {/* Preset themes */}
+      <div className="mb-6">
+        <p className="text-xs font-medium text-gray-600 mb-2">Theme có sẵn (bấm chọn)</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {PRESET_THEMES.map(t => (
+            <button key={t.name} onClick={() => applyPreset(t)}
+              className="card p-3 text-left hover:shadow-md transition-all">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-5 h-5 rounded-full flex-shrink-0" style={{ background: t.primary }} />
+                <span className="text-xs font-medium">{t.name}</span>
+              </div>
+              {t.banner && <p className="text-[10px] text-gray-400 truncate">{t.banner}</p>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Primary color */}
+      <div className="card p-4 mb-4">
+        <p className="text-xs font-medium text-gray-600 mb-2">Màu chủ đạo</p>
+        <div className="flex items-center gap-3">
+          <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
+            className="w-10 h-10 rounded-lg cursor-pointer border-0" />
+          <input className="input-field !text-sm !w-32" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} />
+          <div className="flex gap-1">
+            {['#2D5A3D', '#DA251D', '#B8860B', '#8B5CF6', '#EC4899', '#2563eb', '#DC2626'].map(c => (
+              <button key={c} onClick={() => setPrimaryColor(c)}
+                className="w-7 h-7 rounded-full border-2 transition-all"
+                style={{ background: c, borderColor: primaryColor === c ? '#000' : 'transparent' }} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Banner */}
+      <div className="card p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-medium text-gray-600">Banner thông báo</p>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <span className="text-[10px] text-gray-400">{bannerEnabled ? 'Bật' : 'Tắt'}</span>
+            <div className="relative w-9 h-5 rounded-full transition-colors" style={{ background: bannerEnabled ? '#2D5A3D' : '#d1d5db' }}
+              onClick={() => setBannerEnabled(!bannerEnabled)}>
+              <div className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
+                style={{ left: bannerEnabled ? '18px' : '2px' }} />
+            </div>
+          </label>
+        </div>
+        {bannerEnabled && (
+          <div className="space-y-2">
+            <input className="input-field !text-sm" placeholder="Nội dung banner, VD: Chúc mừng 30/4!"
+              value={bannerText} onChange={e => setBannerText(e.target.value)} />
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-gray-500">Màu banner:</span>
+              <input type="color" value={bannerColor} onChange={e => setBannerColor(e.target.value)} className="w-6 h-6 rounded cursor-pointer border-0" />
+            </div>
+            {bannerText && (
+              <div className="rounded-lg p-2.5 text-center text-xs font-semibold text-white" style={{ background: bannerColor }}>
+                {bannerText}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Background images */}
+      <div className="card p-4 mb-4">
+        <p className="text-xs font-medium text-gray-600 mb-2">Ảnh nền Dashboard</p>
+        <div className="flex items-center gap-3">
+          <input type="file" accept="image/*" onChange={e => setBgFile(e.target.files[0])}
+            className="text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-gray-100" />
+          <button onClick={() => uploadBg(bgFile, 'bg')} disabled={!bgFile || uploading}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>
+            {uploading ? 'Đang tải...' : 'Upload'}
+          </button>
+          {bgUrl && <button onClick={() => setBgUrl('')} className="text-xs text-red-500">Xóa</button>}
+        </div>
+        {bgUrl && <img src={bgUrl} alt="bg" className="mt-2 rounded-lg h-20 object-cover w-full" />}
+      </div>
+
+      <div className="card p-4 mb-4">
+        <p className="text-xs font-medium text-gray-600 mb-2">Ảnh nền trang Đăng nhập</p>
+        <div className="flex items-center gap-3">
+          <input type="file" accept="image/*" onChange={e => setLoginBgFile(e.target.files[0])}
+            className="text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-gray-100" />
+          <button onClick={() => uploadBg(loginBgFile, 'login')} disabled={!loginBgFile || uploading}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>
+            {uploading ? 'Đang tải...' : 'Upload'}
+          </button>
+          {loginBgUrl && <button onClick={() => setLoginBgUrl('')} className="text-xs text-red-500">Xóa</button>}
+        </div>
+        {loginBgUrl && <img src={loginBgUrl} alt="login bg" className="mt-2 rounded-lg h-20 object-cover w-full" />}
+      </div>
+
+      {/* Save button */}
+      <button onClick={saveSettings} disabled={saving}
+        className="w-full py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+        style={{ background: primaryColor }}>
+        {saving ? 'Đang lưu...' : 'Lưu thay đổi giao diện'}
+      </button>
+
+      <p className="text-[10px] text-gray-400 mt-2 text-center">Sau khi lưu, trang sẽ tự refresh để áp dụng giao diện mới</p>
     </div>
   );
 }

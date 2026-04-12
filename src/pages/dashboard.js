@@ -23,6 +23,17 @@ export default function Dashboard() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showSearch, setShowSearch] = useState(false);
+  const [appearance, setAppearance] = useState({ primaryColor: '#2D5A3D', bgUrl: '', bannerText: '', bannerColor: '#2D5A3D', bannerEnabled: false });
+
+  // Load appearance settings
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'appearance').single().then(({ data }) => {
+      if (data) {
+        const v = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        setAppearance(prev => ({ ...prev, ...v }));
+      }
+    });
+  }, []);
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4', show: true },
@@ -108,8 +119,16 @@ export default function Dashboard() {
   const getInitials = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
   const ROLE_LABELS = { director: 'Tổng GĐ', admin: 'Quản lý', accountant: 'Kế toán', member: 'Nhân viên' };
 
+  const pc = appearance.primaryColor || '#2D5A3D';
+
   return (
-    <div className="min-h-screen bg-[#F8F7F4]">
+    <div className="min-h-screen" style={{ background: appearance.bgUrl ? `url(${appearance.bgUrl}) center/cover fixed` : '#F8F7F4' }}>
+      {/* Event Banner */}
+      {appearance.bannerEnabled && appearance.bannerText && (
+        <div className="text-center py-2 text-xs font-semibold text-white" style={{ background: appearance.bannerColor || pc }}>
+          {appearance.bannerText}
+        </div>
+      )}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
           {/* Brand logo */}
