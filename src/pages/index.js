@@ -32,7 +32,7 @@ export default function LoginPage() {
             </svg>
           </div>
           <h1 className="font-display text-2xl font-bold" style={{ color: '#2D5A3D' }}>CCE - TasksFlow</h1>
-          <p className="text-sm mt-1" style={{ color: '#8B7355' }}>Bản quyền @Coco Group</p>
+          <p className="text-sm mt-1" style={{ color: '#8B7355' }}>Coco Spa · Healing & Relax</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-7">

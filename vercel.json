@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/check-deadlines?key=${CRON_SECRET}",
+      "schedule": "*/30 * * * *"
+    }
+  ]
+}

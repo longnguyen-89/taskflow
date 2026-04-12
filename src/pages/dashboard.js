@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { registerPush } from '@/lib/push';
 import TaskList from '@/components/TaskList';
 import CreateTask from '@/components/CreateTask';
 import Performance from '@/components/Performance';
@@ -73,6 +74,8 @@ export default function Dashboard() {
     if (authLoading) return;
     if (!user) { router.push('/'); return; }
     fetchData();
+    // Register push notifications
+    registerPush(user.id).catch(() => {});
   }, [user, authLoading, profile, router, fetchData]);
 
   useEffect(() => {
