@@ -19,6 +19,7 @@ export default function Proposals({ userId, userName, members, department, isDir
   const [newComment, setNewComment] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [filterCat, setFilterCat] = useState('all');
 
   useEffect(() => { fetchAll(); }, [department, dateFrom, dateTo]);
 
@@ -101,9 +102,28 @@ export default function Proposals({ userId, userName, members, department, isDir
         <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white" style={{ background: '#2D5A3D' }}>+ Tạo đề xuất</button>
       </div>
 
+      {/* Category tabs */}
+      <div className="flex gap-1.5 mb-3 flex-wrap">
+        <button onClick={() => setFilterCat('all')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${filterCat === 'all' ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`}
+          style={filterCat === 'all' ? { background: '#2D5A3D' } : {}}>
+          Tất cả ({proposals.length})
+        </button>
+        {categories.map(cat => {
+          const count = proposals.filter(p => p.category_name === cat.name).length;
+          return (
+            <button key={cat.id} onClick={() => setFilterCat(cat.name)}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${filterCat === cat.name ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`}
+              style={filterCat === cat.name ? { background: '#2D5A3D' } : {}}>
+              {cat.name} ({count})
+            </button>
+          );
+        })}
+      </div>
+
       {/* Date filter */}
       <div className="flex gap-2 mb-4 items-center flex-wrap">
-        <span className="text-xs text-gray-500">Lọc:</span>
+        <span className="text-xs text-gray-500">Lọc thời gian:</span>
         <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
         <span className="text-xs text-gray-400">→</span>
         <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateTo} onChange={e => setDateTo(e.target.value)} />
@@ -153,7 +173,7 @@ export default function Proposals({ userId, userName, members, department, isDir
       )}
 
       <div className="space-y-3">
-        {proposals.map(p => {
+        {proposals.filter(p => filterCat === 'all' || p.category_name === filterCat).map(p => {
           const sc = STS[p.status]; const isExp = expanded === p.id; const myAppr = p.approvers?.find(a => a.user_id === userId);
           return (
             <div key={p.id} className="card p-4">
