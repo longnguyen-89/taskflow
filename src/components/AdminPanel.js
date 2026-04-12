@@ -425,7 +425,13 @@ function AppearanceSection() {
   async function uploadBg(file, type) {
     if (!file) return;
     setUploading(true);
-    const path = `appearance/${type}_${Date.now()}_${file.name}`;
+    // Sanitize filename: remove Vietnamese chars, spaces, special chars
+    const safeName = file.name
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/_+/g, '_');
+    const path = `appearance/${type}_${Date.now()}_${safeName}`;
     const { error } = await supabase.storage.from('attachments').upload(path, file);
     if (error) { toast('Lỗi upload: ' + error.message, 'error'); setUploading(false); return; }
     const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(path);
