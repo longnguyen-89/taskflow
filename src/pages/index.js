@@ -1,14 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginBgUrl, setLoginBgUrl] = useState('');
   const { user, profile, loading: authLoading, signIn } = useAuth();
   const router = useRouter();
+
+  // Load login background from appearance settings
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'appearance').single().then(({ data }) => {
+      if (data) {
+        const v = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        if (v.loginBgUrl) setLoginBgUrl(v.loginBgUrl);
+      }
+    });
+  }, []);
 
   // Auto redirect if already logged in
   useEffect(() => {
@@ -47,8 +59,12 @@ export default function LoginPage() {
   // If already logged in, show nothing (will redirect)
   if (user && profile) return null;
 
+  const bgStyle = loginBgUrl
+    ? { background: `url(${loginBgUrl}) center/cover no-repeat fixed` }
+    : { background: 'linear-gradient(135deg, #F5F1EB 0%, #E8E0D4 50%, #F5F1EB 100%)' };
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #F5F1EB 0%, #E8E0D4 50%, #F5F1EB 100%)' }}>
+    <div className="min-h-screen flex items-center justify-center p-4" style={bgStyle}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           {/* Logo */}
@@ -63,7 +79,7 @@ export default function LoginPage() {
           <p className="text-xs mt-1" style={{ color: '#8B7355' }}>Bản quyền @Coco Group</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-7">
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl border border-gray-100 shadow-sm p-7">
           <h2 className="text-center text-sm font-medium text-gray-700 mb-5">Đăng nhập hệ thống</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
