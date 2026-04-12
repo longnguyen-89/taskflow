@@ -14,7 +14,11 @@ export default function Performance({ tasks, members, department, userId, profil
     else if (period === 'quarter') { start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1); }
     else { start = new Date(now.getFullYear(), 0, 1); }
 
-    const targetMembers = isDirector ? members.filter(m => m.role !== 'director') : isAdmin ? members.filter(m => m.department === department && m.role === 'member') : members.filter(m => m.id === userId);
+    const targetMembers = isDirector
+      ? members.filter(m => m.role !== 'director')
+      : isAdmin
+        ? members.filter(m => (m.department === department && m.role === 'member') || m.id === userId)
+        : members.filter(m => m.id === userId);
 
     return targetMembers.map(member => {
       const mt = tasks.filter(t => {
