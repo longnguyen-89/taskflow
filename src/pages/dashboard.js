@@ -15,6 +15,7 @@ export default function Dashboard() {
   const { user, profile, loading: authLoading, signOut, isAdmin, isDirector, isAccountant, canApprove } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState('dashboard');
+  const canSwitchDept = isDirector || isAccountant;
   const [dept, setDept] = useState('nail');
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
@@ -34,6 +35,13 @@ export default function Dashboard() {
       }
     });
   }, []);
+
+  // Lock dept to user's department if not director/accountant
+  useEffect(() => {
+    if (profile && !canSwitchDept) {
+      setDept(profile.department || 'nail');
+    }
+  }, [profile, canSwitchDept]);
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4', show: true },
@@ -139,13 +147,17 @@ export default function Dashboard() {
           </div>
           <h1 className="font-display font-bold text-base" style={{ color: '#2D5A3D' }}>CCE - TasksFlow</h1>
 
-          {/* Dept switcher */}
-          <div className="flex ml-3 p-0.5 rounded-lg" style={{ background: '#f0ebe4' }}>
-            {[{ id: 'nail', l: 'Nail' }, { id: 'hotel', l: 'Hotel' }].map(d => (
-              <button key={d.id} onClick={() => setDept(d.id)}
-                className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${dept === d.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>{d.l}</button>
-            ))}
-          </div>
+          {/* Dept switcher - only for TGĐ and Kế toán */}
+          {canSwitchDept ? (
+            <div className="flex ml-3 p-0.5 rounded-lg" style={{ background: '#f0ebe4' }}>
+              {[{ id: 'nail', l: 'Nail' }, { id: 'hotel', l: 'Hotel' }].map(d => (
+                <button key={d.id} onClick={() => setDept(d.id)}
+                  className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${dept === d.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>{d.l}</button>
+              ))}
+            </div>
+          ) : (
+            <span className="ml-3 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white shadow-sm text-gray-700">{dept === 'hotel' ? 'Hotel' : 'Nail'}</span>
+          )}
 
           <div className="flex-1" />
 

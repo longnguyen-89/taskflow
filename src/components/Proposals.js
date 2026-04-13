@@ -3,6 +3,16 @@ import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
 
+function getFileIcon(name) {
+  const ext = (name || '').toLowerCase();
+  if (ext.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/)) return '🖼';
+  if (ext.match(/\.pdf$/)) return '📄';
+  if (ext.match(/\.(doc|docx)$/)) return '📝';
+  if (ext.match(/\.(xls|xlsx|csv)$/)) return '📊';
+  if (ext.match(/\.(ppt|pptx)$/)) return '📽';
+  return '📎';
+}
+
 const MAIN_TABS = [
   { id: 'mua_hang', label: 'Mua hàng' },
   { id: 'thanh_toan', label: 'Thanh toán' },
@@ -24,6 +34,8 @@ export default function Proposals({ userId, userName, members, department, isDir
   const [expanded, setExpanded] = useState(null);
   const [comments, setComments] = useState({});
   const [newComment, setNewComment] = useState('');
+  const [commentFiles, setCommentFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [filterCat, setFilterCat] = useState('all');
@@ -52,9 +64,20 @@ export default function Proposals({ userId, userName, members, department, isDir
     setComments(p => ({ ...p, [pid]: data || [] }));
   }
   async function addComment(pid) {
-    if (!newComment.trim()) return;
-    await supabase.from('comments').insert({ proposal_id: pid, user_id: userId, content: newComment.trim() });
-    setNewComment(''); loadComments(pid);
+    if (!newComment.trim() && commentFiles.length === 0) return;
+    setUploading(true);
+    const uploadedFiles = [];
+    for (const f of commentFiles) {
+      const safeName = f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+      const path = 'comments/' + pid + '/' + Date.now() + '_' + safeName;
+      const { error } = await supabase.storage.from('attachments').upload(path, f);
+      if (!error) {
+        const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(path);
+        uploadedFiles.push({ name: f.name, url: publicUrl, type: f.type, size: f.size });
+      }
+    }
+    await supabase.from('comments').insert({ proposal_id: pid, user_id: userId, content: newComment.trim(), files: uploadedFiles.length > 0 ? uploadedFiles : null });
+    setNewComment(''); setCommentFiles([]); setUploading(false); loadComments(pid);
   }
 
   async function handleSubmit(e) {
@@ -242,7 +265,7 @@ export default function Proposals({ userId, userName, members, department, isDir
                 <div className="mt-3 pt-3 border-t border-gray-100 animate-fade-in">
                   {p.description && <p className="text-xs text-gray-600 mb-2 leading-relaxed">{p.description}</p>}
                   {p.estimated_cost && <p className="text-xs mb-2">Chi phí: <strong>{fmtCost(p.estimated_cost)}</strong></p>}
-                  {p.files?.length > 0 && (<div className="mb-3"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">File đính kèm</p><div className="flex flex-wrap gap-1">{p.files.map(f => <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" className="px-2 py-1 bg-gray-100 rounded text-[10px] text-gray-600 hover:bg-gray-200">{f.file_name}</a>)}</div></div>)}
+                  {p.files?.length > 0 && (<div className="mb-3"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">File đính kèm ({p.files.length})</p><div className="space-y-1">{p.files.map(f => <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"><span className="text-sm flex-shrink-0">{getFileIcon(f.file_name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.file_name}</span><svg className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></a>)}</div></div>)}
                   <div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Người duyệt</p>
                     {p.approvers?.map(a => (
                       <div key={a.id} className="flex items-center gap-2 mb-1">
@@ -260,8 +283,18 @@ export default function Proposals({ userId, userName, members, department, isDir
                   {p.watchers?.length > 0 && (<div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Theo dõi</p><div className="flex gap-1 flex-wrap">{p.watchers.map(w => <span key={w.id} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] text-gray-500">{w.user?.name}</span>)}</div></div>)}
                   <div className="mt-2 pt-2 border-t border-gray-100">
                     <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Bình luận {comments[p.id]?.length > 0 && `(${comments[p.id].length})`}</p>
-                    {comments[p.id]?.map(c => (<div key={c.id} className="flex gap-2 mb-1"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div><div><p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p><p className="text-xs text-gray-600">{c.content}</p></div></div>))}
-                    <div className="flex gap-2 mt-1.5"><input className="input-field !py-1.5 !text-xs flex-1" placeholder="Bình luận..." value={isExp ? newComment : ''} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && addComment(p.id)} /><button onClick={() => addComment(p.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#2D5A3D' }}>Gửi</button></div>
+                    {comments[p.id]?.map(c => (<div key={c.id} className="flex gap-2 mb-2"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div><div className="flex-1 min-w-0"><p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>{c.content && <p className="text-xs text-gray-600">{c.content}</p>}{c.files && c.files.length > 0 && <div className="space-y-1 mt-1">{c.files.map((f, fi) => <a key={fi} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 group"><span className="text-sm">{getFileIcon(f.name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.name}</span></a>)}</div>}</div></div>))}
+                    <div className="space-y-1.5 mt-1.5">
+                      <div className="flex gap-2">
+                        <input className="input-field !py-1.5 !text-xs flex-1" placeholder="Bình luận..." value={isExp ? newComment : ''} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && addComment(p.id)} />
+                        <label className="flex items-center px-2 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer text-gray-500" title="Đính kèm file">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                          <input type="file" multiple className="hidden" onChange={e => setCommentFiles([...e.target.files])} />
+                        </label>
+                        <button onClick={() => addComment(p.id)} disabled={uploading} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>{uploading ? '...' : 'Gửi'}</button>
+                      </div>
+                      {commentFiles.length > 0 && <div className="space-y-1">{Array.from(commentFiles).map((f, i) => <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-blue-50 text-xs text-blue-700"><span>{getFileIcon(f.name)}</span><span className="truncate flex-1">{f.name}</span></div>)}<button onClick={() => setCommentFiles([])} className="text-[10px] text-red-400">Xóa file</button></div>}
+                    </div>
                   </div>
                 </div>
               )}
