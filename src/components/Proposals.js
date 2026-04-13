@@ -28,8 +28,10 @@ export default function Proposals({ userId, userName, members, department, isDir
   const [dateTo, setDateTo] = useState('');
   const [filterCat, setFilterCat] = useState('all');
 
-  const approvers = members.filter(m => m.id !== userId && (m.role === 'director' || m.role === 'accountant'));
-  const watcherOptions = members.filter(m => m.id !== userId && !approverIds.includes(m.id));
+  // Filter members by department: director/accountant see current tab, others see own dept only
+  const deptMembers = members.filter(m => m.department === department || m.role === 'director' || m.role === 'accountant');
+  const approvers = deptMembers.filter(m => m.id !== userId && (m.role === 'director' || m.role === 'accountant'));
+  const watcherOptions = deptMembers.filter(m => m.id !== userId && !approverIds.includes(m.id));
 
   useEffect(() => { fetchAll(); }, [department, dateFrom, dateTo]);
 
