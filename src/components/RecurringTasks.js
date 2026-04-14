@@ -28,6 +28,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   const [minute, setMinute] = useState(0);
   const [daysOffset, setDaysOffset] = useState(0);
   const [assignees, setAssignees] = useState([]);
+  const [watchers, setWatchers] = useState([]);
   const [chkLines, setChkLines] = useState('');
 
   const deptMembers = members.filter(m => m.department === department || m.role === 'director' || m.role === 'accountant');
@@ -45,7 +46,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
     setTitle(''); setDesc(''); setPriority('medium'); setGroupId('');
     setFrequency('daily'); setWeekday(1); setMonthday(1);
     setHour(18); setMinute(0); setDaysOffset(0);
-    setAssignees([]); setChkLines('');
+    setAssignees([]); setWatchers([]); setChkLines('');
     setEditing(null);
   }
 
@@ -55,6 +56,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
     setFrequency(r.frequency); setWeekday(r.weekday ?? 1); setMonthday(r.monthday ?? 1);
     setHour(r.deadline_hour); setMinute(r.deadline_minute); setDaysOffset(r.deadline_days_offset || 0);
     setAssignees(r.assignee_ids || []);
+    setWatchers(r.watcher_ids || []);
     setChkLines((r.default_checklist || []).join('\n'));
     setShowForm(true);
   }
@@ -72,6 +74,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
       deadline_hour: parseInt(hour), deadline_minute: parseInt(minute),
       deadline_days_offset: parseInt(daysOffset) || 0,
       assignee_ids: assignees,
+      watcher_ids: watchers,
       default_checklist: checklist,
       active: true,
     };
@@ -196,6 +199,25 @@ export default function RecurringTasks({ members, department, userId, taskGroups
           </div>
 
           <div>
+            <label className="block text-[10px] text-gray-500 mb-1">Người theo dõi ({watchers.length} người, tùy chọn)</label>
+            <p className="text-[10px] text-gray-400 mb-1.5">Chỉ nhận thông báo khi task được sinh, không bị tính là người làm.</p>
+            <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
+              {deptMembers.map(m => {
+                const checked = watchers.includes(m.id);
+                const isAssignee = assignees.includes(m.id);
+                return (
+                  <label key={m.id} className={`flex items-center gap-2 p-2 text-xs border-b border-gray-100 last:border-b-0 ${isAssignee ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${checked && !isAssignee ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                    <input type="checkbox" disabled={isAssignee} checked={checked} onChange={() => setWatchers(p => checked ? p.filter(x => x !== m.id) : [...p, m.id])} className="accent-blue-600" />
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold" style={{ background: m.avatar_color || '#f3f4f6' }}>{ini(m.name)}</div>
+                    <span className="flex-1">{m.name}</span>
+                    <span className="text-[9px] text-gray-400">{isAssignee ? 'Đã là người làm' : (m.role === 'director' ? 'Tổng GĐ' : m.role === 'accountant' ? 'Kế toán' : m.position)}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
             <label className="block text-[10px] text-gray-500 mb-0.5">Checklist mặc định (mỗi dòng 1 bước, tùy chọn)</label>
             <textarea className="input-field !text-xs font-mono" rows={5} placeholder="Bật đèn + máy lạnh&#10;Lau quầy lễ tân&#10;Kiểm máy POS&#10;Đếm tiền quỹ đầu ngày" value={chkLines} onChange={e => setChkLines(e.target.value)} />
             <p className="text-[10px] text-gray-400 mt-1">Mỗi lần task được sinh, các bước này sẽ tự động xuất hiện trong checklist.</p>
@@ -224,7 +246,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
                     {!r.active && <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-semibold">TẠM DỪNG</span>}
                   </div>
                   <p className="text-[11px] text-gray-500 mt-0.5">{describeSchedule(r)}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{(r.assignee_ids || []).length} người · {(r.default_checklist || []).length} bước checklist · sinh lần cuối: {r.last_generated_date || 'chưa'}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{(r.assignee_ids || []).length} người làm · {(r.watcher_ids || []).length} theo dõi · {(r.default_checklist || []).length} bước checklist · sinh lần cuối: {r.last_generated_date || 'chưa'}</p>
                 </div>
                 <div className="flex flex-col gap-1">
                   <button onClick={() => openEdit(r)} className="text-[10px] px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100">Sửa</button>

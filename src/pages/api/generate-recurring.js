@@ -97,6 +97,23 @@ export default async function handler(req, res) {
       }
     }
 
+    // Insert watchers (nhận notification, không tính là assignee)
+    if (r.watcher_ids && r.watcher_ids.length > 0) {
+      const wRows = r.watcher_ids
+        .filter(uid => !(r.assignee_ids || []).includes(uid)) // tránh trùng nếu ai đó vừa là assignee vừa watcher
+        .map(uid => ({ task_id: task.id, user_id: uid }));
+      if (wRows.length > 0) {
+        await supabase.from('task_watchers').insert(wRows);
+        for (const uid of wRows.map(x => x.user_id)) {
+          await supabase.from('notifications').insert({
+            user_id: uid, type: 'info',
+            title: 'Task định kỳ mới (theo dõi)', message: `"${r.title}" vừa được sinh để anh/chị theo dõi`,
+            task_id: task.id,
+          });
+        }
+      }
+    }
+
     // Insert default checklist
     if (r.default_checklist && r.default_checklist.length > 0) {
       const chkRows = r.default_checklist.map((text, i) => ({
