@@ -1,0 +1,230 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import { toast } from '@/components/Toaster';
+
+const FREQ = {
+  daily: 'Hằng ngày',
+  weekly: 'Hằng tuần',
+  monthly: 'Hằng tháng',
+};
+const WEEKDAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+const PR = { high: 'Cao', medium: 'TB', low: 'Thấp' };
+
+export default function RecurringTasks({ members, department, userId, taskGroups }) {
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+
+  // form state
+  const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
+  const [priority, setPriority] = useState('medium');
+  const [groupId, setGroupId] = useState('');
+  const [frequency, setFrequency] = useState('daily');
+  const [weekday, setWeekday] = useState(1);
+  const [monthday, setMonthday] = useState(1);
+  const [hour, setHour] = useState(18);
+  const [minute, setMinute] = useState(0);
+  const [assignees, setAssignees] = useState([]);
+  const [chkLines, setChkLines] = useState('');
+
+  const deptMembers = members.filter(m => m.department === department || m.role === 'director' || m.role === 'accountant');
+
+  const fetchList = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from('recurring_tasks').select('*').eq('department', department).order('created_at', { ascending: false });
+    setList(data || []);
+    setLoading(false);
+  }, [department]);
+
+  useEffect(() => { fetchList(); }, [fetchList]);
+
+  function resetForm() {
+    setTitle(''); setDesc(''); setPriority('medium'); setGroupId('');
+    setFrequency('daily'); setWeekday(1); setMonthday(1);
+    setHour(18); setMinute(0);
+    setAssignees([]); setChkLines('');
+    setEditing(null);
+  }
+
+  function openEdit(r) {
+    setEditing(r);
+    setTitle(r.title); setDesc(r.description || ''); setPriority(r.priority); setGroupId(r.group_id || '');
+    setFrequency(r.frequency); setWeekday(r.weekday ?? 1); setMonthday(r.monthday ?? 1);
+    setHour(r.deadline_hour); setMinute(r.deadline_minute);
+    setAssignees(r.assignee_ids || []);
+    setChkLines((r.default_checklist || []).join('\n'));
+    setShowForm(true);
+  }
+
+  async function save() {
+    if (!title.trim()) return toast('Nhập tiêu đề', 'error');
+    if (assignees.length === 0) return toast('Chọn ít nhất 1 người', 'error');
+    const checklist = chkLines.split('\n').map(s => s.trim()).filter(Boolean);
+    const payload = {
+      title: title.trim(), description: desc.trim() || null, priority,
+      department, group_id: groupId || null,
+      frequency,
+      weekday: frequency === 'weekly' ? weekday : null,
+      monthday: frequency === 'monthly' ? monthday : null,
+      deadline_hour: parseInt(hour), deadline_minute: parseInt(minute),
+      assignee_ids: assignees,
+      default_checklist: checklist,
+      active: true,
+    };
+    if (editing) {
+      const { error } = await supabase.from('recurring_tasks').update(payload).eq('id', editing.id);
+      if (error) return toast('Lỗi: ' + error.message, 'error');
+      toast('Đã cập nhật', 'success');
+    } else {
+      payload.created_by = userId;
+      const { error } = await supabase.from('recurring_tasks').insert(payload);
+      if (error) return toast('Lỗi: ' + error.message, 'error');
+      toast('Đã tạo task lặp lại', 'success');
+    }
+    setShowForm(false); resetForm(); fetchList();
+  }
+
+  async function toggleActive(r) {
+    await supabase.from('recurring_tasks').update({ active: !r.active }).eq('id', r.id);
+    fetchList();
+  }
+
+  async function remove(r) {
+    if (!confirm(`Xóa template "${r.title}"? Các task đã sinh trước đó vẫn giữ nguyên.`)) return;
+    await supabase.from('recurring_tasks').delete().eq('id', r.id);
+    toast('Đã xóa template', 'success');
+    fetchList();
+  }
+
+  function describeSchedule(r) {
+    const t = `${String(r.deadline_hour).padStart(2, '0')}:${String(r.deadline_minute).padStart(2, '0')}`;
+    if (r.frequency === 'daily') return `Mỗi ngày, deadline ${t}`;
+    if (r.frequency === 'weekly') return `Mỗi ${WEEKDAYS[r.weekday]} hàng tuần, deadline ${t}`;
+    if (r.frequency === 'monthly') return `Ngày ${r.monthday} hàng tháng, deadline ${t}`;
+    return '';
+  }
+
+  const ini = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold">Task lặp lại định kỳ</h2>
+          <p className="text-[11px] text-gray-500">Hệ thống sẽ tự sinh task vào sáng theo lịch — nhân viên không cần đợi anh giao thủ công.</p>
+        </div>
+        <button onClick={() => { resetForm(); setShowForm(true); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#2D5A3D' }}>+ Tạo template</button>
+      </div>
+
+      {showForm && (
+        <div className="card p-4 space-y-3">
+          <h3 className="text-sm font-bold">{editing ? 'Sửa template' : 'Template mới'}</h3>
+          <input className="input-field !text-xs" placeholder="Tiêu đề task * (vd: Mở cửa chi nhánh Bến Cát)" value={title} onChange={e => setTitle(e.target.value)} />
+          <textarea className="input-field !text-xs" rows={2} placeholder="Mô tả (tùy chọn)" value={desc} onChange={e => setDesc(e.target.value)} />
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Tần suất</label>
+              <select className="input-field !text-xs" value={frequency} onChange={e => setFrequency(e.target.value)}>
+                {Object.entries(FREQ).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Độ ưu tiên</label>
+              <select className="input-field !text-xs" value={priority} onChange={e => setPriority(e.target.value)}>
+                {Object.entries(PR).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {frequency === 'weekly' && (
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-1">Vào thứ</label>
+              <div className="flex gap-1 flex-wrap">
+                {WEEKDAYS.map((d, i) => (
+                  <button key={i} onClick={() => setWeekday(i)} className={`px-2.5 py-1 rounded text-[11px] font-semibold ${weekday === i ? 'text-white' : 'text-gray-600 bg-gray-100'}`} style={weekday === i ? { background: '#2D5A3D' } : {}}>{d}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {frequency === 'monthly' && (
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Ngày trong tháng (1-31)</label>
+              <input type="number" min={1} max={31} className="input-field !text-xs" value={monthday} onChange={e => setMonthday(parseInt(e.target.value) || 1)} />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Deadline trong ngày</label>
+            <div className="flex items-center gap-2">
+              <input type="number" min={0} max={23} className="input-field !text-xs w-20" value={hour} onChange={e => setHour(parseInt(e.target.value) || 0)} />
+              <span>:</span>
+              <input type="number" min={0} max={59} className="input-field !text-xs w-20" value={minute} onChange={e => setMinute(parseInt(e.target.value) || 0)} />
+              <span className="text-[10px] text-gray-400">(giờ:phút)</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-1">Giao cho * ({assignees.length} người)</label>
+            <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
+              {deptMembers.map(m => {
+                const checked = assignees.includes(m.id);
+                return (
+                  <label key={m.id} className={`flex items-center gap-2 p-2 cursor-pointer text-xs border-b border-gray-100 last:border-b-0 ${checked ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
+                    <input type="checkbox" checked={checked} onChange={() => setAssignees(p => checked ? p.filter(x => x !== m.id) : [...p, m.id])} className="accent-emerald-600" />
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold" style={{ background: m.avatar_color || '#f3f4f6' }}>{ini(m.name)}</div>
+                    <span className="flex-1">{m.name}</span>
+                    <span className="text-[9px] text-gray-400">{m.position}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Checklist mặc định (mỗi dòng 1 bước, tùy chọn)</label>
+            <textarea className="input-field !text-xs font-mono" rows={5} placeholder="Bật đèn + máy lạnh&#10;Lau quầy lễ tân&#10;Kiểm máy POS&#10;Đếm tiền quỹ đầu ngày" value={chkLines} onChange={e => setChkLines(e.target.value)} />
+            <p className="text-[10px] text-gray-400 mt-1">Mỗi lần task được sinh, các bước này sẽ tự động xuất hiện trong checklist.</p>
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => { setShowForm(false); resetForm(); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">Hủy</button>
+            <button onClick={save} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#2D5A3D' }}>{editing ? 'Cập nhật' : 'Tạo'}</button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="card p-6 text-center text-sm text-gray-400">Đang tải...</div>
+      ) : list.length === 0 ? (
+        <div className="card p-6 text-center text-sm text-gray-400">Chưa có template nào. Bấm "+ Tạo template" để bắt đầu.</div>
+      ) : (
+        <div className="space-y-2">
+          {list.map(r => (
+            <div key={r.id} className={`card p-3 ${!r.active ? 'opacity-50' : ''}`}>
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-semibold">{r.title}</h4>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold text-white" style={{ background: '#2D5A3D' }}>{FREQ[r.frequency]}</span>
+                    {!r.active && <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-semibold">TẠM DỪNG</span>}
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-0.5">{describeSchedule(r)}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{(r.assignee_ids || []).length} người · {(r.default_checklist || []).length} bước checklist · sinh lần cuối: {r.last_generated_date || 'chưa'}</p>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <button onClick={() => openEdit(r)} className="text-[10px] px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100">Sửa</button>
+                  <button onClick={() => toggleActive(r)} className="text-[10px] px-2 py-1 rounded bg-yellow-50 text-yellow-700 font-semibold hover:bg-yellow-100">{r.active ? 'Tạm dừng' : 'Bật lại'}</button>
+                  <button onClick={() => remove(r)} className="text-[10px] px-2 py-1 rounded bg-red-50 text-red-700 font-semibold hover:bg-red-100">Xóa</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

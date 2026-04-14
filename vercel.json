@@ -1,1 +1,1 @@
-{"crons":[{"path":"/api/check-deadlines","schedule":"0 0 * * *"}]} 
+{"crons":[{"path":"/api/check-deadlines","schedule":"0 0 * * *"},{"path":"/api/generate-recurring","schedule":"0 23 * * *"}]}
