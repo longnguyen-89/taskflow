@@ -3,6 +3,23 @@ import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
 
+function getFileIcon(name) {
+  const ext = (name || '').toLowerCase();
+  if (ext.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/)) return '🖼';
+  if (ext.match(/\.pdf$/)) return '📄';
+  if (ext.match(/\.(doc|docx)$/)) return '📝';
+  if (ext.match(/\.(xls|xlsx|csv)$/)) return '📊';
+  if (ext.match(/\.(ppt|pptx)$/)) return '📽';
+  return '📎';
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 export default function CreateTask({ members, userId, userName, department, taskGroups, onCreated }) {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
@@ -17,6 +34,13 @@ export default function CreateTask({ members, userId, userName, department, task
   function toggleAssignee(id) { setAssignees(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
   function toggleWatcher(id) { setWatchers(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
 
+  function handleAddFile(e) {
+    const newFiles = Array.from(e.target.files);
+    if (newFiles.length > 0) setFiles(prev => [...prev, ...newFiles]);
+    e.target.value = '';
+  }
+  function removeFile(index) { setFiles(prev => prev.filter((_, i) => i !== index)); }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!title.trim()) return toast('Nhập tiêu đề', 'error');
@@ -30,7 +54,6 @@ export default function CreateTask({ members, userId, userName, department, task
 
     if (error) { toast('Lỗi: ' + error.message, 'error'); setSubmitting(false); return; }
 
-    // Assignees
     for (const uid of assignees) {
       await supabase.from('task_assignees').insert({ task_id: task.id, user_id: uid });
       if (uid !== userId) {
@@ -38,13 +61,11 @@ export default function CreateTask({ members, userId, userName, department, task
         sendPush(uid, '📋 Task mới', `${userName} giao: "${title}"`, { url: '/dashboard', tag: 'task-' + task.id });
       }
     }
-    // Watchers
     for (const uid of watchers) {
       await supabase.from('task_watchers').insert({ task_id: task.id, user_id: uid });
       await supabase.from('notifications').insert({ user_id: uid, type: 'info', title: 'Bạn được thêm theo dõi', message: `Task: "${title}"`, task_id: task.id });
       sendPush(uid, '👁 Theo dõi task', `Bạn được thêm theo dõi: "${title}"`, { url: '/dashboard', tag: 'watch-' + task.id });
     }
-    // Files
     for (const f of files) {
       const path = `tasks/${task.id}/${Date.now()}_${f.name}`;
       const { error: ue } = await supabase.storage.from('attachments').upload(path, f);
@@ -85,7 +106,6 @@ export default function CreateTask({ members, userId, userName, department, task
             <textarea className="input-field min-h-[80px] resize-y" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Chi tiết công việc..." />
           </div>
 
-          {/* Assignees - list with checkbox style */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">Giao cho * <span className="text-gray-400">(chọn 1 hoặc nhiều)</span></label>
             <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl p-1">
@@ -102,7 +122,6 @@ export default function CreateTask({ members, userId, userName, department, task
             </div>
           </div>
 
-          {/* Watchers */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">Người theo dõi <span className="text-gray-400">(tùy chọn)</span></label>
             <div className="flex flex-wrap gap-1.5">
@@ -119,7 +138,7 @@ export default function CreateTask({ members, userId, userName, department, task
               <div className="flex gap-1.5">
                 {[{ v: 'high', l: 'Cao', c: '#dc2626' }, { v: 'medium', l: 'TB', c: '#d97706' }, { v: 'low', l: 'Thấp', c: '#2563eb' }].map(p => (
                   <button key={p.v} type="button" onClick={() => setPriority(p.v)}
-                    className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-all`}
+                    className="flex-1 py-2 rounded-lg text-xs font-semibold border transition-all"
                     style={priority === p.v ? { borderColor: p.c, background: p.c + '10', color: p.c } : { borderColor: '#e5e7eb', color: '#9ca3af' }}>{p.l}</button>
                 ))}
               </div>
@@ -130,12 +149,26 @@ export default function CreateTask({ members, userId, userName, department, task
             </div>
           </div>
 
-          {/* File upload */}
+          {/* File upload - each file on its own line */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Đính kèm</label>
-            <input type="file" multiple onChange={e => setFiles([...e.target.files])}
-              className="w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200" />
-            {files.length > 0 && <p className="text-[10px] text-gray-400 mt-1">{files.length} file đã chọn</p>}
+            <div className="space-y-1.5">
+              {files.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50">
+                  <span className="text-sm flex-shrink-0">{getFileIcon(f.name)}</span>
+                  <span className="text-xs text-gray-700 truncate flex-1">{f.name}</span>
+                  <span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.size)}</span>
+                  <button type="button" onClick={() => removeFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0" title="Xóa file">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ))}
+              <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer transition-colors">
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                <span className="text-xs text-gray-500">Chọn file</span>
+                <input type="file" multiple className="hidden" onChange={handleAddFile} />
+              </label>
+            </div>
           </div>
 
           <button type="submit" disabled={submitting} className="w-full py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #2D5A3D, #4A7C5C)' }}>

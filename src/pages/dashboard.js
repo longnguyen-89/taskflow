@@ -26,7 +26,6 @@ export default function Dashboard() {
   const [showSearch, setShowSearch] = useState(false);
   const [appearance, setAppearance] = useState({ primaryColor: '#2D5A3D', bgUrl: '', bannerText: '', bannerColor: '#2D5A3D', bannerEnabled: false });
 
-  // Load appearance settings
   useEffect(() => {
     supabase.from('app_settings').select('value').eq('key', 'appearance').single().then(({ data }) => {
       if (data) {
@@ -36,7 +35,6 @@ export default function Dashboard() {
     });
   }, []);
 
-  // Lock dept to user's department if not director/accountant
   useEffect(() => {
     if (profile && !canSwitchDept) {
       setDept(profile.department || 'nail');
@@ -56,16 +54,15 @@ export default function Dashboard() {
     if (!user || !profile) return;
     setLoading(true);
 
-    // Tasks: director sees all in dept, admin sees all in dept, member sees only assigned+watched
     let taskQuery = supabase.from('tasks').select(`
       *, creator:profiles!tasks_created_by_fkey(id, name, avatar_color, position),
       assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(id, name, avatar_color, position)),
-      watchers:task_watchers(user_id, user:profiles!task_watchers_user_id_fkey(id, name, avatar_color))
+      watchers:task_watchers(user_id, user:profiles!task_watchers_user_id_fkey(id, name, avatar_color)),
+      files:task_files(*)
     `).eq('department', dept).order('created_at', { ascending: false });
 
     const { data: allTasks } = await taskQuery;
 
-    // Filter for members: only see tasks assigned to them or watching
     let filtered = allTasks || [];
     if (!isAdmin && !isAccountant) {
       filtered = filtered.filter(t =>
@@ -93,7 +90,6 @@ export default function Dashboard() {
     if (authLoading) return;
     if (!user) { router.push('/'); return; }
     fetchData();
-    // Register push notifications
     registerPush(user.id).catch(() => {});
   }, [user, authLoading, profile, router, fetchData]);
 
@@ -115,14 +111,17 @@ export default function Dashboard() {
 
   if (authLoading || !profile) return <div className="min-h-screen flex items-center justify-center bg-[#F8F7F4]"><div className="animate-pulse text-gray-400">Đang tải...</div></div>;
 
-  const approvedTasks = tasks.filter(t => t.approval_status !== 'pending');
+  // Stats only count parent tasks (not sub-tasks)
+  const parentTasks = tasks.filter(t => !t.parent_id && t.approval_status !== 'pending');
   const stats = {
-    total: approvedTasks.length,
-    doing: approvedTasks.filter(t => t.status === 'doing').length,
-    done: approvedTasks.filter(t => t.status === 'done').length,
-    waiting: approvedTasks.filter(t => t.status === 'waiting').length,
-    overdue: approvedTasks.filter(t => t.status !== 'done' && t.deadline && new Date(t.deadline) < new Date()).length,
+    total: parentTasks.length,
+    doing: parentTasks.filter(t => t.status === 'doing').length,
+    done: parentTasks.filter(t => t.status === 'done').length,
+    waiting: parentTasks.filter(t => t.status === 'waiting').length,
+    overdue: parentTasks.filter(t => t.status !== 'done' && t.deadline && new Date(t.deadline) < new Date()).length,
   };
+
+  const approvedTasks = tasks.filter(t => t.approval_status !== 'pending');
 
   const getInitials = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
   const ROLE_LABELS = { director: 'Tổng GĐ', admin: 'Quản lý', accountant: 'Kế toán', member: 'Nhân viên' };
@@ -131,7 +130,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen" style={{ background: appearance.bgUrl ? `url(${appearance.bgUrl}) center/cover fixed` : '#F8F7F4' }}>
-      {/* Event Banner */}
       {appearance.bannerEnabled && appearance.bannerText && (
         <div className="text-center py-2 text-xs font-semibold text-white" style={{ background: appearance.bannerColor || pc }}>
           {appearance.bannerText}
@@ -139,7 +137,6 @@ export default function Dashboard() {
       )}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
-          {/* Brand logo */}
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: 'linear-gradient(135deg, #2D5A3D, #4A7C5C)' }}>
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
               <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="2" />
@@ -147,7 +144,6 @@ export default function Dashboard() {
           </div>
           <h1 className="font-display font-bold text-base" style={{ color: '#2D5A3D' }}>CCE - TasksFlow</h1>
 
-          {/* Dept switcher - only for TGĐ and Kế toán */}
           {canSwitchDept ? (
             <div className="flex ml-3 p-0.5 rounded-lg" style={{ background: '#f0ebe4' }}>
               {[{ id: 'nail', l: 'Nail' }, { id: 'hotel', l: 'Hotel' }].map(d => (

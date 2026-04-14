@@ -13,6 +13,23 @@ function getFileIcon(name) {
   return '📎';
 }
 
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function formatVND(val) {
+  const num = String(val).replace(/\D/g, '');
+  if (!num) return '';
+  return Number(num).toLocaleString('de-DE');
+}
+
+function parseVND(str) {
+  return str.replace(/\./g, '').replace(/\D/g, '');
+}
+
 const MAIN_TABS = [
   { id: 'mua_hang', label: 'Mua hàng' },
   { id: 'thanh_toan', label: 'Thanh toán' },
@@ -26,7 +43,7 @@ export default function Proposals({ userId, userName, members, department, isDir
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [catId, setCatId] = useState('');
-  const [cost, setCost] = useState('');
+  const [costDisplay, setCostDisplay] = useState('');
   const [approverIds, setApproverIds] = useState([]);
   const [watcherIds, setWatcherIds] = useState([]);
   const [files, setFiles] = useState([]);
@@ -40,7 +57,6 @@ export default function Proposals({ userId, userName, members, department, isDir
   const [dateTo, setDateTo] = useState('');
   const [filterCat, setFilterCat] = useState('all');
 
-  // Filter members by department: director/accountant see current tab, others see own dept only
   const deptMembers = members.filter(m => m.department === department || m.role === 'director' || m.role === 'accountant');
   const approvers = deptMembers.filter(m => m.id !== userId && (m.role === 'director' || m.role === 'accountant'));
   const watcherOptions = deptMembers.filter(m => m.id !== userId && !approverIds.includes(m.id));
@@ -63,6 +79,7 @@ export default function Proposals({ userId, userName, members, department, isDir
     const { data } = await supabase.from('comments').select('*, user:profiles!comments_user_id_fkey(name, avatar_color)').eq('proposal_id', pid).order('created_at');
     setComments(p => ({ ...p, [pid]: data || [] }));
   }
+
   async function addComment(pid) {
     if (!newComment.trim() && commentFiles.length === 0) return;
     setUploading(true);
@@ -80,6 +97,25 @@ export default function Proposals({ userId, userName, members, department, isDir
     setNewComment(''); setCommentFiles([]); setUploading(false); loadComments(pid);
   }
 
+  function handleCostChange(e) {
+    const raw = parseVND(e.target.value);
+    setCostDisplay(formatVND(raw));
+  }
+
+  function handleAddFile(e) {
+    const newFiles = Array.from(e.target.files);
+    if (newFiles.length > 0) setFiles(prev => [...prev, ...newFiles]);
+    e.target.value = '';
+  }
+  function removeFile(index) { setFiles(prev => prev.filter((_, i) => i !== index)); }
+
+  function handleAddCommentFile(e) {
+    const newFiles = Array.from(e.target.files);
+    if (newFiles.length > 0) setCommentFiles(prev => [...prev, ...newFiles]);
+    e.target.value = '';
+  }
+  function removeCommentFile(index) { setCommentFiles(prev => prev.filter((_, i) => i !== index)); }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!title.trim()) return toast('Nhập tiêu đề', 'error');
@@ -87,9 +123,10 @@ export default function Proposals({ userId, userName, members, department, isDir
     setSubmitting(true);
     const tabLabel = MAIN_TABS.find(t => t.id === activeTab)?.label || 'Mua hàng';
     const catName = catId ? (categories.find(c => c.id === catId)?.name || tabLabel) : tabLabel;
+    const costRaw = parseVND(costDisplay);
     const { data: p, error } = await supabase.from('proposals').insert({
       title: title.trim(), description: desc.trim(), category_id: catId || null,
-      category_name: catName, estimated_cost: cost ? parseInt(cost) : null, department, created_by: userId
+      category_name: catName, estimated_cost: costRaw ? parseInt(costRaw) : null, department, created_by: userId
     }).select().single();
     if (error) { toast('Lỗi: ' + error.message, 'error'); setSubmitting(false); return; }
     for (const aid of approverIds) {
@@ -111,7 +148,7 @@ export default function Proposals({ userId, userName, members, department, isDir
       }
     }
     toast('Đã gửi đề xuất!', 'success');
-    setTitle(''); setDesc(''); setCost(''); setApproverIds([]); setWatcherIds([]); setFiles([]); setCatId('');
+    setTitle(''); setDesc(''); setCostDisplay(''); setApproverIds([]); setWatcherIds([]); setFiles([]); setCatId('');
     setShowForm(false); setSubmitting(false); fetchAll();
   }
 
@@ -122,7 +159,6 @@ export default function Proposals({ userId, userName, members, department, isDir
     const approved = all?.every(a => a.status === 'approved');
     if (done) await supabase.from('proposals').update({ status: approved ? 'approved' : 'rejected', updated_at: new Date().toISOString() }).eq('id', pid);
     else await supabase.from('proposals').update({ status: 'partial', updated_at: new Date().toISOString() }).eq('id', pid);
-    // Push notify the creator
     const proposal = proposals.find(p => p.id === pid);
     if (proposal && proposal.created_by !== uid) {
       const approverName = members.find(m => m.id === uid)?.name || '';
@@ -185,7 +221,7 @@ export default function Proposals({ userId, userName, members, department, isDir
       {showForm && (
         <div className="card p-5 mb-5 animate-slide-up">
           <h3 className="font-semibold text-sm mb-1">Tạo đề xuất — {tabLabel}</h3>
-          <p className="text-[11px] text-gray-400 mb-4">Đề xuất sẽ được lưu vào tab "{tabLabel}"</p>
+          <p className="text-[11px] text-gray-400 mb-4">Đề xuất sẽ được lưu vào tab &quot;{tabLabel}&quot;</p>
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs font-medium text-gray-600 mb-1">Tiêu đề *</label><input className="input-field !text-sm" value={title} onChange={e => setTitle(e.target.value)} required /></div>
@@ -197,7 +233,16 @@ export default function Proposals({ userId, userName, members, department, isDir
               </div>
             </div>
             <div><label className="block text-xs font-medium text-gray-600 mb-1">Mô tả chi tiết</label><textarea className="input-field !text-sm min-h-[70px] resize-y" value={desc} onChange={e => setDesc(e.target.value)} /></div>
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Chi phí dự kiến (VNĐ)</label><input className="input-field !text-sm" type="number" value={cost} onChange={e => setCost(e.target.value)} /></div>
+
+            {/* Cost input with auto-formatting */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Chi phí dự kiến (VNĐ)</label>
+              <div className="relative">
+                <input className="input-field !text-sm !pr-12" type="text" inputMode="numeric" value={costDisplay} onChange={handleCostChange} placeholder="VD: 1.022.000" />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">VNĐ</span>
+              </div>
+              {costDisplay && <p className="text-[10px] text-emerald-600 mt-0.5">{costDisplay} VNĐ</p>}
+            </div>
 
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1.5">Người duyệt * <span className="text-gray-400">(TGĐ / Kế toán)</span></label>
@@ -232,10 +277,28 @@ export default function Proposals({ userId, userName, members, department, isDir
               {watcherIds.length > 0 && <p className="text-[10px] text-blue-600 mt-1">{watcherIds.length} người đã chọn</p>}
             </div>
 
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Đính kèm file</label>
-              <input type="file" multiple onChange={e => setFiles([...e.target.files])} className="w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-gray-100" />
-              {files.length > 0 && <p className="text-[10px] text-gray-400 mt-1">{files.length} file</p>}
+            {/* File upload - each file on its own line */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Đính kèm file</label>
+              <div className="space-y-1.5">
+                {files.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50">
+                    <span className="text-sm flex-shrink-0">{getFileIcon(f.name)}</span>
+                    <span className="text-xs text-gray-700 truncate flex-1">{f.name}</span>
+                    <span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.size)}</span>
+                    <button type="button" onClick={() => removeFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0" title="Xóa file">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                ))}
+                <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer transition-colors">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                  <span className="text-xs text-gray-500">Chọn file</span>
+                  <input type="file" multiple className="hidden" onChange={handleAddFile} />
+                </label>
+              </div>
             </div>
+
             <div className="flex gap-2">
               <button type="submit" disabled={submitting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>{submitting ? 'Đang gửi...' : 'Gửi đề xuất'}</button>
               <button type="button" onClick={() => setShowForm(false)} className="btn-secondary !text-xs">Hủy</button>
@@ -265,7 +328,7 @@ export default function Proposals({ userId, userName, members, department, isDir
                 <div className="mt-3 pt-3 border-t border-gray-100 animate-fade-in">
                   {p.description && <p className="text-xs text-gray-600 mb-2 leading-relaxed">{p.description}</p>}
                   {p.estimated_cost && <p className="text-xs mb-2">Chi phí: <strong>{fmtCost(p.estimated_cost)}</strong></p>}
-                  {p.files?.length > 0 && (<div className="mb-3"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">File đính kèm ({p.files.length})</p><div className="space-y-1">{p.files.map(f => <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"><span className="text-sm flex-shrink-0">{getFileIcon(f.file_name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.file_name}</span><svg className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></a>)}</div></div>)}
+                  {p.files?.length > 0 && (<div className="mb-3"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">File đính kèm ({p.files.length})</p><div className="space-y-1">{p.files.map(f => <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"><span className="text-sm flex-shrink-0">{getFileIcon(f.file_name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.file_name}</span><span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.file_size)}</span><svg className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></a>)}</div></div>)}
                   <div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Người duyệt</p>
                     {p.approvers?.map(a => (
                       <div key={a.id} className="flex items-center gap-2 mb-1">
@@ -283,17 +346,30 @@ export default function Proposals({ userId, userName, members, department, isDir
                   {p.watchers?.length > 0 && (<div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Theo dõi</p><div className="flex gap-1 flex-wrap">{p.watchers.map(w => <span key={w.id} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] text-gray-500">{w.user?.name}</span>)}</div></div>)}
                   <div className="mt-2 pt-2 border-t border-gray-100">
                     <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Bình luận {comments[p.id]?.length > 0 && `(${comments[p.id].length})`}</p>
-                    {comments[p.id]?.map(c => (<div key={c.id} className="flex gap-2 mb-2"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div><div className="flex-1 min-w-0"><p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>{c.content && <p className="text-xs text-gray-600">{c.content}</p>}{c.files && c.files.length > 0 && <div className="space-y-1 mt-1">{c.files.map((f, fi) => <a key={fi} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 group"><span className="text-sm">{getFileIcon(f.name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.name}</span></a>)}</div>}</div></div>))}
+                    {comments[p.id]?.map(c => (<div key={c.id} className="flex gap-2 mb-2"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div><div className="flex-1 min-w-0"><p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>{c.content && <p className="text-xs text-gray-600">{c.content}</p>}{c.files && c.files.length > 0 && <div className="space-y-1 mt-1">{c.files.map((f, fi) => <a key={fi} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 group"><span className="text-sm">{getFileIcon(f.name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.name}</span><span className="text-[9px] text-gray-400">{formatFileSize(f.size)}</span></a>)}</div>}</div></div>))}
                     <div className="space-y-1.5 mt-1.5">
                       <div className="flex gap-2">
                         <input className="input-field !py-1.5 !text-xs flex-1" placeholder="Bình luận..." value={isExp ? newComment : ''} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && addComment(p.id)} />
                         <label className="flex items-center px-2 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer text-gray-500" title="Đính kèm file">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                          <input type="file" multiple className="hidden" onChange={e => setCommentFiles([...e.target.files])} />
+                          <input type="file" multiple className="hidden" onChange={handleAddCommentFile} />
                         </label>
                         <button onClick={() => addComment(p.id)} disabled={uploading} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>{uploading ? '...' : 'Gửi'}</button>
                       </div>
-                      {commentFiles.length > 0 && <div className="space-y-1">{Array.from(commentFiles).map((f, i) => <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-blue-50 text-xs text-blue-700"><span>{getFileIcon(f.name)}</span><span className="truncate flex-1">{f.name}</span></div>)}<button onClick={() => setCommentFiles([])} className="text-[10px] text-red-400">Xóa file</button></div>}
+                      {commentFiles.length > 0 && (
+                        <div className="space-y-1">
+                          {commentFiles.map((f, i) => (
+                            <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-blue-50 text-xs text-blue-700">
+                              <span>{getFileIcon(f.name)}</span>
+                              <span className="truncate flex-1">{f.name}</span>
+                              <span className="text-[9px] text-blue-400">{formatFileSize(f.size)}</span>
+                              <button onClick={() => removeCommentFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
