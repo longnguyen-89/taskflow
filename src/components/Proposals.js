@@ -176,7 +176,19 @@ export default function Proposals({ userId, userName, members, department, isDir
   const STS = { pending: { l: 'Chờ duyệt', c: '#d97706' }, partial: { l: 'Đang duyệt', c: '#2563eb' }, approved: { l: 'Đã duyệt', c: '#16a34a' }, rejected: { l: 'Từ chối', c: '#dc2626' } };
 
   const tabLabel = MAIN_TABS.find(t => t.id === activeTab)?.label;
-  const tabProposals = proposals.filter(p => {
+
+  // Visibility rule: nhân viên/quản lý chỉ thấy đề xuất của chính mình
+  // hoặc được thêm vào người duyệt / người theo dõi.
+  // Ngoại lệ: Tổng GĐ và Kế toán (canApprove) thấy hết toàn hệ thống.
+  const visibleProposals = canApprove
+    ? proposals
+    : proposals.filter(p =>
+        p.created_by === userId
+        || (p.approvers || []).some(a => a.user_id === userId)
+        || (p.watchers || []).some(w => w.user_id === userId)
+      );
+
+  const tabProposals = visibleProposals.filter(p => {
     if (activeTab === 'thanh_toan') return p.category_name === 'Thanh toán';
     return p.category_name !== 'Thanh toán';
   });
@@ -193,7 +205,7 @@ export default function Proposals({ userId, userName, members, department, isDir
               className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${activeTab === t.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
               {t.label}
               <span className="ml-1.5 text-[10px] font-normal text-gray-400">
-                ({proposals.filter(p => t.id === 'thanh_toan' ? p.category_name === 'Thanh toán' : p.category_name !== 'Thanh toán').length})
+                ({visibleProposals.filter(p => t.id === 'thanh_toan' ? p.category_name === 'Thanh toán' : p.category_name !== 'Thanh toán').length})
               </span>
             </button>
           ))}
