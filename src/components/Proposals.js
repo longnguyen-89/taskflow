@@ -1,7 +1,114 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
+
+// Render @Name as styled chip in comment content
+function renderMentions(text, mentionables) {
+  if (!text) return null;
+  const names = (mentionables || []).map(m => m.name).filter(Boolean).sort((a, b) => b.length - a.length);
+  if (names.length === 0) return text;
+  const escaped = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp('@(' + escaped.join('|') + ')', 'g');
+  const parts = [];
+  let last = 0; let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(<span key={m.index} className="text-blue-600 font-semibold bg-blue-50 px-1 rounded">@{m[1]}</span>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
+// Input with @mention autocomplete dropdown
+function MentionInput({ value, setValue, onSend, mentionables, onMention, ini, placeholder }) {
+  const inputRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [anchor, setAnchor] = useState(0);
+  const [selIdx, setSelIdx] = useState(0);
+  const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const filtered = open
+    ? mentionables.filter(m => { if (!query) return true; return norm(m.name).includes(norm(query)); }).slice(0, 8)
+    : [];
+  useEffect(() => { setSelIdx(0); }, [query, open]);
+
+  function handleChange(e) {
+    const val = e.target.value;
+    const caret = e.target.selectionStart || val.length;
+    setValue(val);
+    const upto = val.slice(0, caret);
+    const atIdx = upto.lastIndexOf('@');
+    if (atIdx >= 0) {
+      const before = atIdx === 0 ? ' ' : upto[atIdx - 1];
+      const isBoundary = /\s/.test(before) || atIdx === 0;
+      const q = upto.slice(atIdx + 1);
+      if (isBoundary && !/\s$/.test(q)) {
+        setOpen(true); setQuery(q); setAnchor(atIdx); return;
+      }
+    }
+    setOpen(false); setQuery('');
+  }
+  function pickMention(member) {
+    if (!member) return;
+    const val = value || '';
+    const before = val.slice(0, anchor);
+    const afterIdx = anchor + 1 + query.length;
+    const after = val.slice(afterIdx);
+    const insert = '@' + member.name + ' ';
+    const newVal = before + insert + after;
+    setValue(newVal);
+    setOpen(false); setQuery('');
+    if (onMention) onMention(member.id);
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        const pos = (before + insert).length;
+        try { inputRef.current.setSelectionRange(pos, pos); } catch (e) {}
+      }
+    }, 0);
+  }
+  function handleKeyDown(e) {
+    if (open && filtered.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(i => (i + 1) % filtered.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSelIdx(i => (i - 1 + filtered.length) % filtered.length); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(filtered[selIdx]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setOpen(false); return; }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend && onSend(); }
+  }
+  return (
+    <div className="relative flex-1">
+      <input
+        ref={inputRef}
+        className="input-field !py-1.5 !text-xs w-full"
+        placeholder={placeholder || 'Bình luận... (gõ @ để nhắc tên)'}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute bottom-full left-0 mb-1 w-64 max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+          {filtered.map((m, i) => (
+            <div key={m.id} onMouseDown={(e) => { e.preventDefault(); pickMention(m); }}
+              className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer text-xs ${i === selIdx ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
+              <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: m.avatar_color || '#f3f4f6', color: '#333' }}>{ini(m.name)}</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{m.name}</p>
+                <p className="text-[9px] text-gray-400 truncate">
+                  {m.role === 'director' ? 'Tổng Giám đốc' : m.role === 'accountant' ? 'Kế toán' : (m.position || '')}
+                  {m.department ? ` · ${m.department === 'hotel' ? 'Hotel' : 'Nail'}` : ''}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function getFileIcon(name) {
   const ext = (name || '').toLowerCase();
@@ -53,6 +160,7 @@ export default function Proposals({ userId, userName, members, department, isDir
   const [newComment, setNewComment] = useState('');
   const [commentFiles, setCommentFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [mentionedIds, setMentionedIds] = useState([]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [filterCat, setFilterCat] = useState('all');
@@ -60,6 +168,8 @@ export default function Proposals({ userId, userName, members, department, isDir
   const deptMembers = members.filter(m => m.department === department || m.role === 'director' || m.role === 'accountant');
   const approvers = deptMembers.filter(m => m.id !== userId && (m.role === 'director' || m.role === 'accountant'));
   const watcherOptions = deptMembers.filter(m => m.id !== userId && !approverIds.includes(m.id));
+  // Người có thể được @mention trong bình luận đề xuất: cùng phòng ban + TGĐ/Kế toán, loại bỏ chính mình.
+  const mentionables = deptMembers.filter(m => m.id !== userId);
 
   useEffect(() => { fetchAll(); }, [department, dateFrom, dateTo]);
 
@@ -93,8 +203,31 @@ export default function Proposals({ userId, userName, members, department, isDir
         uploadedFiles.push({ name: f.name, url: publicUrl, type: f.type, size: f.size });
       }
     }
-    await supabase.from('comments').insert({ proposal_id: pid, user_id: userId, content: newComment.trim(), files: uploadedFiles.length > 0 ? uploadedFiles : null });
-    setNewComment(''); setCommentFiles([]); setUploading(false); loadComments(pid);
+    const contentText = newComment.trim();
+    await supabase.from('comments').insert({ proposal_id: pid, user_id: userId, content: contentText, files: uploadedFiles.length > 0 ? uploadedFiles : null });
+
+    // Gửi thông báo cho những người được @mention trong bình luận đề xuất
+    try {
+      const proposal = proposals.find(p => p.id === pid);
+      const pTitle = proposal?.title || '';
+      const uniqueIds = Array.from(new Set(mentionedIds));
+      for (const mid of uniqueIds) {
+        const m = members.find(x => x.id === mid);
+        if (!m) continue;
+        if (!contentText.includes('@' + m.name)) continue;
+        if (mid === userId) continue;
+        await supabase.from('notifications').insert({
+          user_id: mid,
+          type: 'mention',
+          title: 'Bạn được nhắc đến',
+          message: `${userName || 'Ai đó'} đã nhắc bạn trong đề xuất "${pTitle}"`,
+          proposal_id: pid,
+        });
+        sendPush(mid, 'Bạn được nhắc đến', `${userName || 'Ai đó'} nhắc bạn trong đề xuất "${pTitle}"`, { url: '/dashboard', tag: 'mention-p-' + pid });
+      }
+    } catch (e) { /* ignore notification errors */ }
+
+    setNewComment(''); setCommentFiles([]); setMentionedIds([]); setUploading(false); loadComments(pid);
   }
 
   function handleCostChange(e) {
@@ -178,16 +311,16 @@ export default function Proposals({ userId, userName, members, department, isDir
   const tabLabel = MAIN_TABS.find(t => t.id === activeTab)?.label;
 
   // Visibility rule: nhân viên/quản lý chỉ thấy đề xuất của chính mình
-  // hoặc được thêm vào người duyệt / người theo dõi.
+  // hoặc được chỉ định làm người duyệt.
   // Ngoại lệ: Tổng GĐ và Kế toán thấy hết toàn hệ thống.
-  // (Không dùng canApprove vì canApprove bao gồm cả role admin/quản lý)
+  // (Người theo dõi/watcher vẫn nhận thông báo nhưng KHÔNG thấy đề xuất của người
+  //  khác trong danh sách — tránh lẫn dữ liệu giữa các nhân viên.)
   const canViewAll = isDirector || isAccountant;
   const visibleProposals = canViewAll
     ? proposals
     : proposals.filter(p =>
         p.created_by === userId
         || (p.approvers || []).some(a => a.user_id === userId)
-        || (p.watchers || []).some(w => w.user_id === userId)
       );
 
   const tabProposals = visibleProposals.filter(p => {
@@ -360,10 +493,17 @@ export default function Proposals({ userId, userName, members, department, isDir
                   {p.watchers?.length > 0 && (<div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Theo dõi</p><div className="flex gap-1 flex-wrap">{p.watchers.map(w => <span key={w.id} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] text-gray-500">{w.user?.name}</span>)}</div></div>)}
                   <div className="mt-2 pt-2 border-t border-gray-100">
                     <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Bình luận {comments[p.id]?.length > 0 && `(${comments[p.id].length})`}</p>
-                    {comments[p.id]?.map(c => (<div key={c.id} className="flex gap-2 mb-2"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div><div className="flex-1 min-w-0"><p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>{c.content && <p className="text-xs text-gray-600">{c.content}</p>}{c.files && c.files.length > 0 && <div className="space-y-1 mt-1">{c.files.map((f, fi) => <a key={fi} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 group"><span className="text-sm">{getFileIcon(f.name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.name}</span><span className="text-[9px] text-gray-400">{formatFileSize(f.size)}</span></a>)}</div>}</div></div>))}
+                    {comments[p.id]?.map(c => (<div key={c.id} className="flex gap-2 mb-2"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div><div className="flex-1 min-w-0"><p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>{c.content && <p className="text-xs text-gray-600">{renderMentions(c.content, mentionables)}</p>}{c.files && c.files.length > 0 && <div className="space-y-1 mt-1">{c.files.map((f, fi) => <a key={fi} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 group"><span className="text-sm">{getFileIcon(f.name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.name}</span><span className="text-[9px] text-gray-400">{formatFileSize(f.size)}</span></a>)}</div>}</div></div>))}
                     <div className="space-y-1.5 mt-1.5">
                       <div className="flex gap-2">
-                        <input className="input-field !py-1.5 !text-xs flex-1" placeholder="Bình luận..." value={isExp ? newComment : ''} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && addComment(p.id)} />
+                        <MentionInput
+                          value={isExp ? newComment : ''}
+                          setValue={setNewComment}
+                          onSend={() => addComment(p.id)}
+                          mentionables={mentionables}
+                          onMention={(uid) => setMentionedIds(prev => prev.includes(uid) ? prev : [...prev, uid])}
+                          ini={ini}
+                        />
                         <label className="flex items-center px-2 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer text-gray-500" title="Đính kèm file">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                           <input type="file" multiple className="hidden" onChange={handleAddCommentFile} />

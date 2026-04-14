@@ -69,12 +69,12 @@ export default function Dashboard() {
     // Chỉ Tổng GĐ và Kế toán thấy toàn bộ task của phòng ban (để oversight).
     // Các role khác (admin/quản lý, member/nhân viên) chỉ thấy task của chính mình:
     //   - được giao (assignee)
-    //   - được thêm theo dõi (watcher)
     //   - do chính mình tạo
+    // (Người theo dõi/watcher vẫn nhận thông báo nhưng KHÔNG thấy task trong dashboard
+    //  để tránh KPI bị lẫn dữ liệu của người khác.)
     if (!isDirector && !isAccountant) {
       filtered = filtered.filter(t =>
         t.assignees?.some(a => a.user_id === user.id) ||
-        t.watchers?.some(w => w.user_id === user.id) ||
         t.created_by === user.id
       );
     }
