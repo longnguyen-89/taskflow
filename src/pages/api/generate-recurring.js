@@ -67,64 +67,77 @@ export default async function handler(req, res) {
     const ymdForISO = deadlineDateForISO.toISOString().slice(0, 10);
     const deadlineISO = new Date(`${ymdForISO}T${String(utcHour).padStart(2, '0')}:${String(r.deadline_minute).padStart(2, '0')}:00.000Z`).toISOString();
 
-    // Insert task
-    const { data: task, error: te } = await supabase.from('tasks').insert({
-      title: r.title,
-      description: r.description,
-      priority: r.priority,
-      department: r.department,
-      group_id: r.group_id,
-      deadline: deadlineISO,
-      created_by: r.created_by,
-      status: 'todo',
-      approval_status: 'approved',  // task lặp lại bỏ qua duyệt
-      recurring_id: r.id,
-    }).select().single();
-    if (te) { skipped.push({ id: r.id, reason: 'insert_failed', error: te.message }); continue; }
+    // PHƯƠNG ÁN A: tạo N task RIÊNG cho N assignee (mỗi người 1 task độc lập).
+    // Tất cả chia sẻ cùng group_key để admin biết xuất phát từ 1 template.
+    const assigneeList = (r.assignee_ids && r.assignee_ids.length > 0) ? r.assignee_ids : [null];
+    const groupKey = (globalThis.crypto && globalThis.crypto.randomUUID)
+      ? globalThis.crypto.randomUUID()
+      : null;
 
-    // Insert assignees
-    if (r.assignee_ids && r.assignee_ids.length > 0) {
-      const rows = r.assignee_ids.map(uid => ({ task_id: task.id, user_id: uid }));
-      await supabase.from('task_assignees').insert(rows);
+    const createdTaskIds = [];
+    let insertErr = null;
 
-      // Notify each assignee
-      for (const uid of r.assignee_ids) {
+    for (const assigneeId of assigneeList) {
+      const { data: task, error: te } = await supabase.from('tasks').insert({
+        title: r.title,
+        description: r.description,
+        priority: r.priority,
+        department: r.department,
+        group_id: r.group_id,
+        group_key: groupKey,
+        deadline: deadlineISO,
+        created_by: r.created_by,
+        status: 'todo',
+        approval_status: 'approved',  // task lặp lại bỏ qua duyệt
+        recurring_id: r.id,
+      }).select().single();
+      if (te) { insertErr = insertErr || te; continue; }
+      createdTaskIds.push(task.id);
+
+      // Gán assignee duy nhất cho task này (nếu có)
+      if (assigneeId) {
+        await supabase.from('task_assignees').insert({ task_id: task.id, user_id: assigneeId });
         await supabase.from('notifications').insert({
-          user_id: uid, type: 'new_task',
+          user_id: assigneeId, type: 'new_task',
           title: 'Task định kỳ hôm nay', message: `"${r.title}" — deadline ${String(r.deadline_hour).padStart(2,'0')}:${String(r.deadline_minute).padStart(2,'0')}`,
           task_id: task.id,
         });
       }
-    }
 
-    // Insert watchers (nhận notification, không tính là assignee)
-    if (r.watcher_ids && r.watcher_ids.length > 0) {
-      const wRows = r.watcher_ids
-        .filter(uid => !(r.assignee_ids || []).includes(uid)) // tránh trùng nếu ai đó vừa là assignee vừa watcher
-        .map(uid => ({ task_id: task.id, user_id: uid }));
-      if (wRows.length > 0) {
-        await supabase.from('task_watchers').insert(wRows);
-        for (const uid of wRows.map(x => x.user_id)) {
-          await supabase.from('notifications').insert({
-            user_id: uid, type: 'info',
-            title: 'Task định kỳ mới (theo dõi)', message: `"${r.title}" vừa được sinh để anh/chị theo dõi`,
-            task_id: task.id,
-          });
+      // Watchers cho task này (không trùng với assignee của chính task này)
+      if (r.watcher_ids && r.watcher_ids.length > 0) {
+        const wRows = r.watcher_ids
+          .filter(uid => uid !== assigneeId)
+          .map(uid => ({ task_id: task.id, user_id: uid }));
+        if (wRows.length > 0) {
+          await supabase.from('task_watchers').insert(wRows);
+          for (const uid of wRows.map(x => x.user_id)) {
+            await supabase.from('notifications').insert({
+              user_id: uid, type: 'info',
+              title: 'Task định kỳ mới (theo dõi)', message: `"${r.title}" vừa được sinh để anh/chị theo dõi`,
+              task_id: task.id,
+            });
+          }
         }
+      }
+
+      // Checklist mặc định riêng cho từng task (để mỗi người tick độc lập)
+      if (r.default_checklist && r.default_checklist.length > 0) {
+        const chkRows = r.default_checklist.map((text, i) => ({
+          task_id: task.id, text, position: i, done: false,
+        }));
+        await supabase.from('task_checklist').insert(chkRows);
       }
     }
 
-    // Insert default checklist
-    if (r.default_checklist && r.default_checklist.length > 0) {
-      const chkRows = r.default_checklist.map((text, i) => ({
-        task_id: task.id, text, position: i, done: false,
-      }));
-      await supabase.from('task_checklist').insert(chkRows);
+    if (createdTaskIds.length === 0) {
+      skipped.push({ id: r.id, reason: 'insert_failed', error: insertErr?.message });
+      continue;
     }
 
     // Mark generated
     await supabase.from('recurring_tasks').update({ last_generated_date: today }).eq('id', r.id);
-    generated.push({ id: r.id, task_id: task.id, title: r.title });
+    generated.push({ id: r.id, created_tasks: createdTaskIds.length, title: r.title });
   }
 
   return res.status(200).json({

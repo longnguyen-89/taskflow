@@ -47,35 +47,90 @@ export default function CreateTask({ members, userId, userName, department, task
     if (assignees.length === 0) return toast('Chọn người thực hiện', 'error');
     setSubmitting(true);
 
-    const { data: task, error } = await supabase.from('tasks').insert({
-      title: title.trim(), description: desc.trim(), priority, department, group_id: groupId || null,
-      deadline: deadline ? new Date(deadline).toISOString() : null, created_by: userId, status: 'todo', approval_status: 'none'
-    }).select().single();
+    // PHƯƠNG ÁN A: giao cho N người → tạo N task RIÊNG BIỆT, mỗi người 1 task.
+    // Tất cả được gắn cùng group_key để quản lý biết chúng xuất phát từ 1 lần giao.
+    // Mỗi task có status + completed_at + comments + checklist riêng → không còn
+    // chuyện 1 người xong là cả nhóm bị tick xong.
+    const groupKey = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const r = Math.random() * 16 | 0;
+          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
 
-    if (error) { toast('Lỗi: ' + error.message, 'error'); setSubmitting(false); return; }
-
-    for (const uid of assignees) {
-      await supabase.from('task_assignees').insert({ task_id: task.id, user_id: uid });
-      if (uid !== userId) {
-        await supabase.from('notifications').insert({ user_id: uid, type: 'new_task', title: 'Task mới', message: `${userName} giao: "${title}"`, task_id: task.id });
-        sendPush(uid, '📋 Task mới', `${userName} giao: "${title}"`, { url: '/dashboard', tag: 'task-' + task.id });
-      }
-    }
-    for (const uid of watchers) {
-      await supabase.from('task_watchers').insert({ task_id: task.id, user_id: uid });
-      await supabase.from('notifications').insert({ user_id: uid, type: 'info', title: 'Bạn được thêm theo dõi', message: `Task: "${title}"`, task_id: task.id });
-      sendPush(uid, '👁 Theo dõi task', `Bạn được thêm theo dõi: "${title}"`, { url: '/dashboard', tag: 'watch-' + task.id });
-    }
+    // Upload files 1 lần, lưu URL — rồi tạo task_files row riêng cho từng task.
+    const sharedFiles = [];
     for (const f of files) {
-      const path = `tasks/${task.id}/${Date.now()}_${f.name}`;
+      const safeName = f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+      const path = `groups/${groupKey}/${Date.now()}_${safeName}`;
       const { error: ue } = await supabase.storage.from('attachments').upload(path, f);
       if (!ue) {
         const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(path);
-        await supabase.from('task_files').insert({ task_id: task.id, file_name: f.name, file_url: publicUrl, file_type: f.type, file_size: f.size, uploaded_by: userId });
+        sharedFiles.push({ file_name: f.name, file_url: publicUrl, file_type: f.type, file_size: f.size });
       }
     }
 
-    toast('Đã tạo & giao task!', 'success');
+    const deadlineISO = deadline ? new Date(deadline).toISOString() : null;
+    let firstError = null;
+    let createdCount = 0;
+
+    for (const uid of assignees) {
+      const { data: task, error } = await supabase.from('tasks').insert({
+        title: title.trim(),
+        description: desc.trim(),
+        priority,
+        department,
+        group_id: groupId || null,
+        group_key: groupKey,
+        deadline: deadlineISO,
+        created_by: userId,
+        status: 'todo',
+        approval_status: 'none',
+      }).select().single();
+
+      if (error) { firstError = firstError || error; continue; }
+      createdCount++;
+
+      // Assignee duy nhất cho task này
+      await supabase.from('task_assignees').insert({ task_id: task.id, user_id: uid });
+
+      // Thông báo cho người được giao
+      if (uid !== userId) {
+        await supabase.from('notifications').insert({
+          user_id: uid, type: 'new_task', title: 'Task mới',
+          message: `${userName} giao: "${title}"`, task_id: task.id,
+        });
+        sendPush(uid, '📋 Task mới', `${userName} giao: "${title}"`, { url: '/dashboard', tag: 'task-' + task.id });
+      }
+
+      // Watchers cho từng task
+      for (const wid of watchers) {
+        await supabase.from('task_watchers').insert({ task_id: task.id, user_id: wid });
+        await supabase.from('notifications').insert({
+          user_id: wid, type: 'info', title: 'Bạn được thêm theo dõi',
+          message: `Task: "${title}"`, task_id: task.id,
+        });
+        sendPush(wid, '👁 Theo dõi task', `Bạn được thêm theo dõi: "${title}"`, { url: '/dashboard', tag: 'watch-' + task.id });
+      }
+
+      // File đính kèm — mỗi task có bản ghi riêng trỏ cùng URL
+      if (sharedFiles.length > 0) {
+        await supabase.from('task_files').insert(
+          sharedFiles.map(f => ({
+            task_id: task.id, file_name: f.file_name, file_url: f.file_url,
+            file_type: f.file_type, file_size: f.file_size, uploaded_by: userId,
+          }))
+        );
+      }
+    }
+
+    if (createdCount === 0) {
+      toast('Lỗi: ' + (firstError?.message || 'không tạo được task'), 'error');
+      setSubmitting(false);
+      return;
+    }
+
+    toast(`Đã tạo ${createdCount} task cho ${createdCount} người!`, 'success');
     setTitle(''); setDesc(''); setPriority('medium'); setDeadline(''); setAssignees([]); setWatchers([]); setGroupId(''); setFiles([]);
     setSubmitting(false); onCreated();
   }
