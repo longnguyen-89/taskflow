@@ -26,6 +26,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   const [monthday, setMonthday] = useState(1);
   const [hour, setHour] = useState(18);
   const [minute, setMinute] = useState(0);
+  const [daysOffset, setDaysOffset] = useState(0);
   const [assignees, setAssignees] = useState([]);
   const [chkLines, setChkLines] = useState('');
 
@@ -43,7 +44,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   function resetForm() {
     setTitle(''); setDesc(''); setPriority('medium'); setGroupId('');
     setFrequency('daily'); setWeekday(1); setMonthday(1);
-    setHour(18); setMinute(0);
+    setHour(18); setMinute(0); setDaysOffset(0);
     setAssignees([]); setChkLines('');
     setEditing(null);
   }
@@ -52,7 +53,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
     setEditing(r);
     setTitle(r.title); setDesc(r.description || ''); setPriority(r.priority); setGroupId(r.group_id || '');
     setFrequency(r.frequency); setWeekday(r.weekday ?? 1); setMonthday(r.monthday ?? 1);
-    setHour(r.deadline_hour); setMinute(r.deadline_minute);
+    setHour(r.deadline_hour); setMinute(r.deadline_minute); setDaysOffset(r.deadline_days_offset || 0);
     setAssignees(r.assignee_ids || []);
     setChkLines((r.default_checklist || []).join('\n'));
     setShowForm(true);
@@ -69,6 +70,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
       weekday: frequency === 'weekly' ? weekday : null,
       monthday: frequency === 'monthly' ? monthday : null,
       deadline_hour: parseInt(hour), deadline_minute: parseInt(minute),
+      deadline_days_offset: parseInt(daysOffset) || 0,
       assignee_ids: assignees,
       default_checklist: checklist,
       active: true,
@@ -100,9 +102,11 @@ export default function RecurringTasks({ members, department, userId, taskGroups
 
   function describeSchedule(r) {
     const t = `${String(r.deadline_hour).padStart(2, '0')}:${String(r.deadline_minute).padStart(2, '0')}`;
-    if (r.frequency === 'daily') return `Mỗi ngày, deadline ${t}`;
-    if (r.frequency === 'weekly') return `Mỗi ${WEEKDAYS[r.weekday]} hàng tuần, deadline ${t}`;
-    if (r.frequency === 'monthly') return `Ngày ${r.monthday} hàng tháng, deadline ${t}`;
+    const off = r.deadline_days_offset || 0;
+    const dtText = off === 0 ? `deadline ${t} cùng ngày` : `deadline ${t} sau ${off} ngày`;
+    if (r.frequency === 'daily') return `Mỗi ngày, ${dtText}`;
+    if (r.frequency === 'weekly') return `Mỗi ${WEEKDAYS[r.weekday]} hàng tuần, ${dtText}`;
+    if (r.frequency === 'monthly') return `Ngày ${r.monthday} hàng tháng, ${dtText}`;
     return '';
   }
 
@@ -157,14 +161,21 @@ export default function RecurringTasks({ members, department, userId, taskGroups
             </div>
           )}
 
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-0.5">Deadline trong ngày</label>
-            <div className="flex items-center gap-2">
-              <input type="number" min={0} max={23} className="input-field !text-xs w-20" value={hour} onChange={e => setHour(parseInt(e.target.value) || 0)} />
+          <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-200">
+            <label className="block text-[10px] font-semibold text-gray-600 mb-1.5">Deadline của task</label>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] text-gray-500">Sau khi sinh</span>
+              <input type="number" min={0} max={60} className="input-field !text-xs w-16" value={daysOffset} onChange={e => setDaysOffset(parseInt(e.target.value) || 0)} />
+              <span className="text-[11px] text-gray-500">ngày, lúc</span>
+              <input type="number" min={0} max={23} className="input-field !text-xs w-16" value={hour} onChange={e => setHour(parseInt(e.target.value) || 0)} />
               <span>:</span>
-              <input type="number" min={0} max={59} className="input-field !text-xs w-20" value={minute} onChange={e => setMinute(parseInt(e.target.value) || 0)} />
-              <span className="text-[10px] text-gray-400">(giờ:phút)</span>
+              <input type="number" min={0} max={59} className="input-field !text-xs w-16" value={minute} onChange={e => setMinute(parseInt(e.target.value) || 0)} />
             </div>
+            <p className="text-[10px] text-gray-400 mt-1.5">
+              {daysOffset === 0
+                ? '→ Deadline ngay trong ngày task được sinh'
+                : `→ Deadline ${daysOffset} ngày sau khi sinh (nhân viên có ${daysOffset + 1} ngày để hoàn thành)`}
+            </p>
           </div>
 
           <div>

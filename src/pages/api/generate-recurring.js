@@ -52,13 +52,20 @@ export default async function handler(req, res) {
     else if (r.frequency === 'monthly') matches = r.monthday === monthday;
     if (!matches) { skipped.push({ id: r.id, reason: 'no_match_today' }); continue; }
 
-    // Build deadline = today at HH:MM Vietnam time → ISO UTC
-    // Vietnam HH:MM = UTC HH-7:MM
+    // Build deadline = (today + days_offset) at HH:MM Vietnam time → ISO UTC
+    // VN = UTC+7, so VN HH:MM corresponds to UTC (HH-7):MM on a VN-date basis.
+    const offset = r.deadline_days_offset || 0;
+    // Compute the VN date N days after `today`
+    const vnDeadlineDate = new Date(`${today}T00:00:00.000Z`);
+    vnDeadlineDate.setUTCDate(vnDeadlineDate.getUTCDate() + offset);
+    const deadlineVnYmd = vnDeadlineDate.toISOString().slice(0, 10);
     const utcHour = (r.deadline_hour - 7 + 24) % 24;
-    const baseDay = vn.getUTCDate();
-    // If utcHour rolled past midnight backward, the date might be the same UTC day
-    // because we already added +7h to "now"; safer to construct from the VN date string
-    const deadlineISO = new Date(`${today}T${String(utcHour).padStart(2, '0')}:${String(r.deadline_minute).padStart(2, '0')}:00.000Z`).toISOString();
+    // If r.deadline_hour < 7 (e.g. 2am VN), it maps to previous UTC day — shift date back 1
+    const needsDayBack = r.deadline_hour < 7;
+    const deadlineDateForISO = new Date(`${deadlineVnYmd}T00:00:00.000Z`);
+    if (needsDayBack) deadlineDateForISO.setUTCDate(deadlineDateForISO.getUTCDate() - 1);
+    const ymdForISO = deadlineDateForISO.toISOString().slice(0, 10);
+    const deadlineISO = new Date(`${ymdForISO}T${String(utcHour).padStart(2, '0')}:${String(r.deadline_minute).padStart(2, '0')}:00.000Z`).toISOString();
 
     // Insert task
     const { data: task, error: te } = await supabase.from('tasks').insert({
