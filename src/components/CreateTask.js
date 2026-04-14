@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
+import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
 
 function getFileIcon(name) {
   const ext = (name || '').toLowerCase();
@@ -20,7 +21,7 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-export default function CreateTask({ members, userId, userName, department, taskGroups, onCreated }) {
+export default function CreateTask({ members, userId, userName, department, branch, allowedBranches, canViewAll, taskGroups, onCreated }) {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [priority, setPriority] = useState('medium');
@@ -30,6 +31,24 @@ export default function CreateTask({ members, userId, userName, department, task
   const [groupId, setGroupId] = useState('');
   const [files, setFiles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // Chi nhánh có thể chọn khi tạo (cho dept=nail).
+  const branchOptions = (department === 'nail')
+    ? (canViewAll ? NAIL_BRANCHES.map(b => b.id) : (Array.isArray(allowedBranches) ? allowedBranches : []))
+    : [];
+  const [taskBranch, setTaskBranch] = useState(branch || (branchOptions.length === 1 ? branchOptions[0] : ''));
+  useEffect(() => {
+    setTaskBranch(branch || (branchOptions.length === 1 ? branchOptions[0] : ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branch, department]);
+
+  // Giới hạn danh sách giao task theo chi nhánh đang chọn.
+  const filteredMembers = (department === 'nail' && taskBranch)
+    ? members.filter(m =>
+        m.role === 'director' || m.role === 'accountant' ||
+        (Array.isArray(m.branches) && m.branches.includes(taskBranch))
+      )
+    : members;
 
   function toggleAssignee(id) { setAssignees(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
   function toggleWatcher(id) { setWatchers(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
@@ -45,6 +64,7 @@ export default function CreateTask({ members, userId, userName, department, task
     e.preventDefault();
     if (!title.trim()) return toast('Nhập tiêu đề', 'error');
     if (assignees.length === 0) return toast('Chọn người thực hiện', 'error');
+    if (department === 'nail' && branchOptions.length > 0 && !taskBranch) return toast('Chọn chi nhánh cho task', 'error');
     setSubmitting(true);
 
     // PHƯƠNG ÁN A: giao cho N người → tạo N task RIÊNG BIỆT, mỗi người 1 task.
@@ -80,6 +100,7 @@ export default function CreateTask({ members, userId, userName, department, task
         description: desc.trim(),
         priority,
         department,
+        branch: department === 'nail' ? (taskBranch || null) : null,
         group_id: groupId || null,
         group_key: groupKey,
         deadline: deadlineISO,
@@ -143,6 +164,24 @@ export default function CreateTask({ members, userId, userName, department, task
         <h2 className="font-display font-bold text-lg mb-1" style={{ color: '#2D5A3D' }}>Giao task mới</h2>
         <p className="text-xs text-gray-500 mb-5">Giao trực tiếp cho nhân viên</p>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {department === 'nail' && branchOptions.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Chi nhánh *</label>
+              {branchOptions.length === 1 ? (
+                <div className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold">{branchLabel(branchOptions[0])}</div>
+              ) : (
+                <div className="flex gap-1.5 flex-wrap">
+                  {branchOptions.map(bid => (
+                    <button key={bid} type="button" onClick={() => { setTaskBranch(bid); setAssignees([]); setWatchers([]); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${taskBranch === bid ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-500'}`}>
+                      {branchLabel(bid)}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-[10px] text-gray-400 mt-1">Chỉ nhân sự thuộc chi nhánh này (+ TGĐ/Kế toán) sẽ hiển thị ở danh sách giao task.</p>
+            </div>
+          )}
           {taskGroups.length > 0 && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Nhóm công việc</label>
@@ -164,7 +203,7 @@ export default function CreateTask({ members, userId, userName, department, task
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">Giao cho * <span className="text-gray-400">(chọn 1 hoặc nhiều)</span></label>
             <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl p-1">
-              {members.map(m => (
+              {filteredMembers.map(m => (
                 <div key={m.id} onClick={() => toggleAssignee(m.id)}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-all ${assignees.includes(m.id) ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
                   <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${assignees.includes(m.id) ? 'border-emerald-600 bg-emerald-600' : 'border-gray-300'}`}>
@@ -180,7 +219,7 @@ export default function CreateTask({ members, userId, userName, department, task
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">Người theo dõi <span className="text-gray-400">(tùy chọn)</span></label>
             <div className="flex flex-wrap gap-1.5">
-              {members.filter(m => !assignees.includes(m.id)).map(m => (
+              {filteredMembers.filter(m => !assignees.includes(m.id)).map(m => (
                 <button key={m.id} type="button" onClick={() => toggleWatcher(m.id)}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all ${watchers.includes(m.id) ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500'}`}>{m.name}</button>
               ))}

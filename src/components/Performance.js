@@ -14,10 +14,19 @@ export default function Performance({ tasks, members, department, userId, profil
     else if (period === 'quarter') { start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1); }
     else { start = new Date(now.getFullYear(), 0, 1); }
 
+    // Phân trang KPI theo chi nhánh.
+    // - TGĐ: toàn bộ nhân viên (theo dept, trừ chính TGĐ).
+    // - Admin: chỉ nhân viên thuộc chi nhánh mình phụ trách + chính mình.
+    // - Member: chỉ bản thân.
+    const selfBranches = Array.isArray(profile?.branches) ? profile.branches : [];
     const targetMembers = isDirector
-      ? members.filter(m => m.role !== 'director')
+      ? members.filter(m => m.role !== 'director' && m.department === department)
       : isAdmin
-        ? members.filter(m => (m.department === department && m.role === 'member') || m.id === userId)
+        ? members.filter(m =>
+            m.id === userId ||
+            (m.department === department && m.role === 'member' &&
+             (department !== 'nail' || (Array.isArray(m.branches) && m.branches.some(b => selfBranches.includes(b)))))
+          )
         : members.filter(m => m.id === userId);
 
     return targetMembers.map(member => {

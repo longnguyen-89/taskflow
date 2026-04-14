@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { email, password, name, role, position, department } = req.body;
+  const { email, password, name, role, position, department, branches } = req.body;
 
   if (!email || !password || !name) {
     return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
@@ -35,6 +35,7 @@ export default async function handler(req, res) {
     role: role || 'member',
     position: position || 'Kỹ thuật viên',
     department: department || 'nail',
+    branches: Array.isArray(branches) && branches.length > 0 ? branches : null,
     avatar_color: colors[Math.floor(Math.random() * colors.length)],
   });
 

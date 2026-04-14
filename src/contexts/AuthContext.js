@@ -31,12 +31,12 @@ export function AuthProvider({ children }) {
     return { error };
   }
 
-  async function createUser(email, password, name, role, position, department) {
+  async function createUser(email, password, name, role, position, department, branches) {
     try {
       const res = await fetch('/api/create-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, role, position, department }),
+        body: JSON.stringify({ email, password, name, role, position, department, branches }),
       });
       const data = await res.json();
       if (!res.ok) return { error: { message: data.error } };

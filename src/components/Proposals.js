@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
+import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
 
 // Render @Name as styled chip in comment content
 function renderMentions(text, mentionables) {
@@ -142,7 +143,12 @@ const MAIN_TABS = [
   { id: 'thanh_toan', label: 'Thanh toán' },
 ];
 
-export default function Proposals({ userId, userName, members, department, isDirector, isAccountant, canApprove }) {
+export default function Proposals({ userId, userName, members, department, branch, allowedBranches, canViewAll: canViewAllProp, profile, isDirector, isAccountant, canApprove }) {
+  // Chi nhánh được chọn khi tạo đề xuất mới. Mặc định = chi nhánh đang xem,
+  // hoặc chi nhánh duy nhất của user nếu chỉ có 1.
+  const defaultCreateBranch = branch || (department === 'nail' && profile?.branches?.length === 1 ? profile.branches[0] : '');
+  const [createBranch, setCreateBranch] = useState(defaultCreateBranch);
+  useEffect(() => { setCreateBranch(branch || (department === 'nail' && profile?.branches?.length === 1 ? profile.branches[0] : '')); }, [branch, department, profile]);
   const [activeTab, setActiveTab] = useState('mua_hang');
   const [proposals, setProposals] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -164,6 +170,11 @@ export default function Proposals({ userId, userName, members, department, isDir
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [filterCat, setFilterCat] = useState('all');
+
+  // Chi nhánh user được phép tạo đề xuất cho (TGĐ/KT: 4 cn, admin: cn phụ trách, member: 1 cn).
+  const createBranchOptions = (department === 'nail')
+    ? (canViewAllProp ? NAIL_BRANCHES.map(b => b.id) : (Array.isArray(profile?.branches) ? profile.branches : []))
+    : [];
 
   const deptMembers = members.filter(m => m.department === department || m.role === 'director' || m.role === 'accountant');
   const approvers = deptMembers.filter(m => m.id !== userId && (m.role === 'director' || m.role === 'accountant'));
@@ -253,13 +264,17 @@ export default function Proposals({ userId, userName, members, department, isDir
     e.preventDefault();
     if (!title.trim()) return toast('Nhập tiêu đề', 'error');
     if (approverIds.length === 0) return toast('Chọn người duyệt', 'error');
+    if (department === 'nail' && createBranchOptions.length > 0 && !createBranch) {
+      return toast('Chọn chi nhánh cho đề xuất', 'error');
+    }
     setSubmitting(true);
     const tabLabel = MAIN_TABS.find(t => t.id === activeTab)?.label || 'Mua hàng';
     const catName = catId ? (categories.find(c => c.id === catId)?.name || tabLabel) : tabLabel;
     const costRaw = parseVND(costDisplay);
     const { data: p, error } = await supabase.from('proposals').insert({
       title: title.trim(), description: desc.trim(), category_id: catId || null,
-      category_name: catName, estimated_cost: costRaw ? parseInt(costRaw) : null, department, created_by: userId
+      category_name: catName, estimated_cost: costRaw ? parseInt(costRaw) : null,
+      department, branch: department === 'nail' ? (createBranch || null) : null, created_by: userId
     }).select().single();
     if (error) { toast('Lỗi: ' + error.message, 'error'); setSubmitting(false); return; }
     for (const aid of approverIds) {
@@ -310,17 +325,27 @@ export default function Proposals({ userId, userName, members, department, isDir
 
   const tabLabel = MAIN_TABS.find(t => t.id === activeTab)?.label;
 
-  // Visibility rule: nhân viên/quản lý chỉ thấy đề xuất của chính mình
-  // hoặc được chỉ định làm người duyệt.
-  // Ngoại lệ: Tổng GĐ và Kế toán thấy hết toàn hệ thống.
-  // (Người theo dõi/watcher vẫn nhận thông báo nhưng KHÔNG thấy đề xuất của người
-  //  khác trong danh sách — tránh lẫn dữ liệu giữa các nhân viên.)
+  // Visibility rule theo chi nhánh + vai trò.
+  // - TGĐ & Kế toán: toàn bộ (đã lọc theo dept & branch ở query).
+  // - Quản lý (admin): toàn bộ đề xuất trong chi nhánh mình phụ trách.
+  // - Nhân viên (member): chỉ đề xuất liên quan (creator, approver, watcher).
   const canViewAll = isDirector || isAccountant;
-  const visibleProposals = canViewAll
-    ? proposals
-    : proposals.filter(p =>
+  // Lọc theo chi nhánh đang xem (nếu có branch prop) hoặc các chi nhánh được phép.
+  let branchScoped = proposals;
+  if (department === 'nail') {
+    if (branch) {
+      branchScoped = proposals.filter(p => p.branch === branch);
+    } else if (!canViewAll) {
+      const allowed = Array.isArray(allowedBranches) ? allowedBranches : [];
+      if (allowed.length > 0) branchScoped = proposals.filter(p => p.branch && allowed.includes(p.branch));
+    }
+  }
+  const visibleProposals = (canViewAll || profile?.role === 'admin')
+    ? branchScoped
+    : branchScoped.filter(p =>
         p.created_by === userId
         || (p.approvers || []).some(a => a.user_id === userId)
+        || (p.watchers || []).some(w => w.user_id === userId)
       );
 
   const tabProposals = visibleProposals.filter(p => {
@@ -370,6 +395,23 @@ export default function Proposals({ userId, userName, members, department, isDir
           <h3 className="font-semibold text-sm mb-1">Tạo đề xuất — {tabLabel}</h3>
           <p className="text-[11px] text-gray-400 mb-4">Đề xuất sẽ được lưu vào tab &quot;{tabLabel}&quot;</p>
           <form onSubmit={handleSubmit} className="space-y-3">
+            {department === 'nail' && createBranchOptions.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Chi nhánh *</label>
+                {createBranchOptions.length === 1 ? (
+                  <div className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold">{branchLabel(createBranchOptions[0])}</div>
+                ) : (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {createBranchOptions.map(bid => (
+                      <button key={bid} type="button" onClick={() => setCreateBranch(bid)}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${createBranch === bid ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-500'}`}>
+                        {branchLabel(bid)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs font-medium text-gray-600 mb-1">Tiêu đề *</label><input className="input-field !text-sm" value={title} onChange={e => setTitle(e.target.value)} required /></div>
               <div><label className="block text-xs font-medium text-gray-600 mb-1">Phân loại chi tiết</label>
@@ -466,6 +508,7 @@ export default function Proposals({ userId, userName, members, department, isDir
                     <p className="text-sm font-semibold">{p.title}</p>
                     <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold" style={{ background: sc.c + '15', color: sc.c }}>{sc.l}</span>
                     <span className="px-1.5 py-0.5 rounded text-[9px] bg-gray-100 text-gray-500">{p.category_name}</span>
+                    {p.branch && <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-50 text-emerald-700 font-semibold">{branchLabel(p.branch)}</span>}
                   </div>
                   <p className="text-[10px] text-gray-400 mt-0.5">{p.creator?.name} · {fmtDT(p.created_at)} {p.estimated_cost ? ` · ${fmtCost(p.estimated_cost)}` : ''}</p>
                 </div>

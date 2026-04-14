@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { useAuth } from '@/contexts/AuthContext';
+import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
 
 const POSITIONS = ['Quản lý', 'Kỹ thuật viên', 'Lễ tân', 'Kế toán', 'Buồng phòng', 'Bảo vệ'];
 const ROLES = [
@@ -59,30 +60,49 @@ function UsersSection({ members, department, createUser, onRefresh }) {
   const [role, setRole] = useState('member');
   const [position, setPosition] = useState('Kỹ thuật viên');
   const [userDept, setUserDept] = useState(department);
+  const [userBranches, setUserBranches] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState('all');
 
-  function reset() { setName(''); setEmail(''); setPassword(''); setRole('member'); setPosition('Kỹ thuật viên'); setUserDept(department); setShowForm(false); setEditId(null); }
+  function reset() { setName(''); setEmail(''); setPassword(''); setRole('member'); setPosition('Kỹ thuật viên'); setUserDept(department); setUserBranches([]); setShowForm(false); setEditId(null); }
+
+  function toggleBranch(bid) {
+    setUserBranches(prev => prev.includes(bid) ? prev.filter(x => x !== bid) : [...prev, bid]);
+  }
+
+  // TGĐ & Kế toán thấy toàn bộ, không cần branches. Hotel dùng department thay branch.
+  const needsBranch = userDept === 'nail' && role !== 'director' && role !== 'accountant';
+  // Member chỉ nên có 1 chi nhánh; admin có thể nhiều.
+  const maxBranches = role === 'member' ? 1 : NAIL_BRANCHES.length;
 
   async function handleAdd(e) {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !password.trim()) return toast('Điền đầy đủ', 'error');
     if (password.length < 6) return toast('Mật khẩu tối thiểu 6 ký tự', 'error');
+    if (needsBranch && userBranches.length === 0) return toast('Chọn ít nhất 1 chi nhánh', 'error');
     setSubmitting(true);
-    const { error } = await createUser(email.trim(), password, name.trim(), role, position, userDept);
+    const branchesToSave = needsBranch ? userBranches : null;
+    const { error } = await createUser(email.trim(), password, name.trim(), role, position, userDept, branchesToSave);
     if (error) { toast('Lỗi: ' + error.message, 'error'); setSubmitting(false); return; }
     toast(`Đã tạo tài khoản ${name}!`, 'success'); reset(); setSubmitting(false); onRefresh();
   }
 
   async function handleUpdate() {
+    if (needsBranch && userBranches.length === 0) return toast('Chọn ít nhất 1 chi nhánh', 'error');
     setSubmitting(true);
-    const { error } = await supabase.from('profiles').update({ role, position, department: userDept }).eq('id', editId);
+    const branchesToSave = needsBranch ? userBranches : null;
+    const { error } = await supabase.from('profiles').update({ role, position, department: userDept, branches: branchesToSave }).eq('id', editId);
     if (error) toast('Lỗi: ' + error.message, 'error');
     else { toast('Đã cập nhật!', 'success'); reset(); onRefresh(); }
     setSubmitting(false);
   }
 
-  function startEdit(m) { setEditId(m.id); setName(m.name); setEmail(m.email); setRole(m.role); setPosition(m.position || ''); setUserDept(m.department || 'nail'); setShowForm(true); }
+  function startEdit(m) {
+    setEditId(m.id); setName(m.name); setEmail(m.email); setRole(m.role);
+    setPosition(m.position || ''); setUserDept(m.department || 'nail');
+    setUserBranches(Array.isArray(m.branches) ? m.branches : []);
+    setShowForm(true);
+  }
   const getInitials = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
   const filtered = filter === 'all' ? members : members.filter(m => m.department === filter);
@@ -136,6 +156,33 @@ function UsersSection({ members, department, createUser, onRefresh }) {
             <div className="p-2.5 rounded-lg text-xs text-gray-600 leading-relaxed" style={{ background: '#f0ebe4' }}>
               {ROLES.find(r => r.v === role)?.d}
             </div>
+
+            {/* Branch picker — only for nail, non-director/non-accountant */}
+            {needsBranch && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Chi nhánh Nail {role === 'admin' ? '(quản lý — chọn nhiều chi nhánh phụ trách)' : '(nhân viên — chọn 1 chi nhánh)'}
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {NAIL_BRANCHES.map(b => {
+                    const active = userBranches.includes(b.id);
+                    return (
+                      <button key={b.id} type="button" onClick={() => {
+                        if (role === 'member') setUserBranches([b.id]); // member: single select
+                        else toggleBranch(b.id);
+                      }}
+                        className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${active ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                        {b.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {userBranches.length > 0 && <p className="text-[10px] text-emerald-600 mt-1.5">Đã chọn: {userBranches.map(branchLabel).join(', ')}</p>}
+              </div>
+            )}
+            {userDept === 'nail' && (role === 'director' || role === 'accountant') && (
+              <p className="text-[11px] text-gray-500 italic">TGĐ & Kế toán xem được toàn bộ 4 chi nhánh (không cần chọn).</p>
+            )}
             <div className="flex gap-2">
               <button type="submit" disabled={submitting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>{submitting ? 'Đang xử lý...' : (editId ? 'Cập nhật' : 'Tạo tài khoản')}</button>
               <button type="button" onClick={reset} className="btn-secondary !text-xs">Hủy</button>
@@ -156,6 +203,9 @@ function UsersSection({ members, department, createUser, onRefresh }) {
               </div>
               <span className="px-2 py-0.5 rounded text-[10px] font-semibold" style={{ background: rc.c + '15', color: rc.c }}>{rc.l}</span>
               <span className="text-[10px] text-gray-400">{m.department === 'hotel' ? 'Hotel' : 'Nail'}</span>
+              {m.department === 'nail' && Array.isArray(m.branches) && m.branches.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-medium">{m.branches.map(branchLabel).join(', ')}</span>
+              )}
               <span className="text-[10px] text-gray-400">{m.position}</span>
               <button onClick={() => startEdit(m)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>

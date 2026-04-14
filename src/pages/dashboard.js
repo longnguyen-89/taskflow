@@ -11,13 +11,16 @@ import Proposals from '@/components/Proposals';
 import AdminPanel from '@/components/AdminPanel';
 import RecurringTasks from '@/components/RecurringTasks';
 import SearchModal from '@/components/SearchModal';
+import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
 
 export default function Dashboard() {
   const { user, profile, loading: authLoading, signOut, isAdmin, isDirector, isAccountant, canApprove } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState('dashboard');
-  const canSwitchDept = isDirector || isAccountant;
+  const canViewAll = isDirector || isAccountant;
   const [dept, setDept] = useState('nail');
+  // branch: chi nhánh đang xem (chỉ áp dụng khi dept='nail'). null = tất cả chi nhánh user có quyền.
+  const [branch, setBranch] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
   const [taskGroups, setTaskGroups] = useState([]);
@@ -37,10 +40,26 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (profile && !canSwitchDept) {
+    if (profile && !canViewAll) {
       setDept(profile.department || 'nail');
     }
-  }, [profile, canSwitchDept]);
+  }, [profile, canViewAll]);
+
+  // Xác định danh sách chi nhánh user được phép xem (cho Nail).
+  // - TGĐ/Kế toán: cả 4 chi nhánh
+  // - Quản lý (admin): các chi nhánh được gán trong profile.branches
+  // - Nhân viên: 1 chi nhánh trong profile.branches
+  const allowedBranches = (canViewAll
+    ? NAIL_BRANCHES.map(b => b.id)
+    : (Array.isArray(profile?.branches) ? profile.branches : [])
+  );
+  // Khi profile load xong, nếu user chỉ có 1 chi nhánh → auto chọn. Nếu nhiều → để null (all).
+  useEffect(() => {
+    if (!profile) return;
+    if (dept !== 'nail') { setBranch(null); return; }
+    if (!canViewAll && allowedBranches.length === 1) setBranch(allowedBranches[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, dept, canViewAll]);
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4', show: true },
@@ -66,15 +85,29 @@ export default function Dashboard() {
     const { data: allTasks } = await taskQuery;
 
     let filtered = allTasks || [];
-    // Chỉ Tổng GĐ và Kế toán thấy toàn bộ task của phòng ban (để oversight).
-    // Các role khác (admin/quản lý, member/nhân viên) chỉ thấy task của chính mình:
-    //   - được giao (assignee)
-    //   - do chính mình tạo
-    // (Người theo dõi/watcher vẫn nhận thông báo nhưng KHÔNG thấy task trong dashboard
-    //  để tránh KPI bị lẫn dữ liệu của người khác.)
-    if (!isDirector && !isAccountant) {
+
+    // Lọc theo chi nhánh (chỉ áp dụng cho Nail).
+    if (dept === 'nail') {
+      if (branch) {
+        // Tab cụ thể: chỉ lấy task thuộc chi nhánh đang chọn.
+        filtered = filtered.filter(t => t.branch === branch);
+      } else if (!canViewAll) {
+        // Admin xem "tất cả": giới hạn trong các chi nhánh được gán.
+        const allowed = Array.isArray(profile?.branches) ? profile.branches : [];
+        if (allowed.length > 0) {
+          filtered = filtered.filter(t => t.branch && allowed.includes(t.branch));
+        }
+      }
+    }
+
+    // Lọc theo vai trò:
+    // - TGĐ / Kế toán: thấy toàn bộ (trong phạm vi dept/branch đã lọc)
+    // - Quản lý (admin): thấy toàn bộ task trong các chi nhánh mình phụ trách
+    // - Nhân viên (member): chỉ thấy task liên quan đến mình (assignee, watcher, creator)
+    if (!isDirector && !isAccountant && profile?.role === 'member') {
       filtered = filtered.filter(t =>
         t.assignees?.some(a => a.user_id === user.id) ||
+        t.watchers?.some(w => w.user_id === user.id) ||
         t.created_by === user.id
       );
     }
@@ -91,7 +124,7 @@ export default function Dashboard() {
     setUnreadCount(notifs?.filter(n => !n.read).length || 0);
 
     setLoading(false);
-  }, [user, profile, dept, isDirector, isAccountant]);
+  }, [user, profile, dept, branch, isDirector, isAccountant, canViewAll]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -151,15 +184,38 @@ export default function Dashboard() {
           </div>
           <h1 className="font-display font-bold text-base" style={{ color: '#2D5A3D' }}>CCE - TasksFlow</h1>
 
-          {canSwitchDept ? (
+          {canViewAll ? (
             <div className="flex ml-3 p-0.5 rounded-lg" style={{ background: '#f0ebe4' }}>
               {[{ id: 'nail', l: 'Nail' }, { id: 'hotel', l: 'Hotel' }].map(d => (
-                <button key={d.id} onClick={() => setDept(d.id)}
+                <button key={d.id} onClick={() => { setDept(d.id); setBranch(null); }}
                   className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${dept === d.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>{d.l}</button>
               ))}
             </div>
           ) : (
             <span className="ml-3 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white shadow-sm text-gray-700">{dept === 'hotel' ? 'Hotel' : 'Nail'}</span>
+          )}
+
+          {/* Branch switcher (chỉ hiển thị khi xem Nail và có nhiều hơn 1 chi nhánh truy cập được) */}
+          {dept === 'nail' && allowedBranches.length > 1 && (
+            <div className="flex p-0.5 rounded-lg ml-1" style={{ background: '#f0ebe4' }}>
+              {canViewAll && (
+                <button onClick={() => setBranch(null)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${branch === null ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
+                  Tất cả
+                </button>
+              )}
+              {NAIL_BRANCHES.filter(b => allowedBranches.includes(b.id)).map(b => (
+                <button key={b.id} onClick={() => setBranch(b.id)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${branch === b.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {dept === 'nail' && !canViewAll && allowedBranches.length === 1 && (
+            <span className="ml-1 px-2.5 py-1.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700">
+              {branchLabel(allowedBranches[0])}
+            </span>
           )}
 
           <div className="flex-1" />
@@ -211,8 +267,8 @@ export default function Dashboard() {
             <TaskList tasks={approvedTasks} members={members} isAdmin={isDirector || isAccountant} userId={user.id} onRefresh={fetchData} department={dept} currentUserRole={profile?.role} currentUserName={profile?.name} />
           </div>
         )}
-        {tab === 'create' && isAdmin && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
-        {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} isDirector={isDirector} isAccountant={isAccountant} canApprove={canApprove} />}
+        {tab === 'create' && isAdmin && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
+        {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} profile={profile} isDirector={isDirector} isAccountant={isAccountant} canApprove={canApprove} />}
         {tab === 'performance' && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isDirector || isAccountant} isDirector={isDirector} />}
         {tab === 'notifications' && <Notifications notifications={notifications} userId={user.id} onRefresh={fetchData} />}
         {tab === 'admin' && isDirector && <AdminPanel members={members} department={dept} onRefresh={fetchData} />}
