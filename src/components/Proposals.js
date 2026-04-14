@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
 import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
+import { deleteProposalCascade } from '@/lib/deletions';
 
 // Render @Name as styled chip in comment content
 function renderMentions(text, mentionables) {
@@ -300,6 +301,18 @@ export default function Proposals({ userId, userName, members, department, branc
     setShowForm(false); setSubmitting(false); fetchAll();
   }
 
+  async function handleDeleteProposal(pid, pTitle) {
+    if (!isDirector) return;
+    const ok = typeof window !== 'undefined' && window.confirm(
+      `⚠ XOÁ VĨNH VIỄN đề xuất này?\n\n"${pTitle}"\n\nSẽ xoá cả: người duyệt, người theo dõi, file đính kèm, bình luận. KHÔNG thể khôi phục.`
+    );
+    if (!ok) return;
+    const { error } = await deleteProposalCascade(pid);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    toast('Đã xoá đề xuất', 'success');
+    fetchAll();
+  }
+
   async function handleApprove(pid, uid, action) {
     await supabase.from('proposal_approvers').update({ status: action, decided_at: new Date().toISOString() }).eq('proposal_id', pid).eq('user_id', uid);
     const { data: all } = await supabase.from('proposal_approvers').select('status').eq('proposal_id', pid);
@@ -516,6 +529,16 @@ export default function Proposals({ userId, userName, members, department, branc
               </div>
               {isExp && (
                 <div className="mt-3 pt-3 border-t border-gray-100 animate-fade-in">
+                  {isDirector && (
+                    <div className="flex justify-end mb-2">
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteProposal(p.id, p.title); }}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                        title="Xoá vĩnh viễn (chỉ TGĐ)">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                        Xoá đề xuất
+                      </button>
+                    </div>
+                  )}
                   {p.description && <p className="text-xs text-gray-600 mb-2 leading-relaxed">{p.description}</p>}
                   {p.estimated_cost && <p className="text-xs mb-2">Chi phí: <strong>{fmtCost(p.estimated_cost)}</strong></p>}
                   {p.files?.length > 0 && (<div className="mb-3"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">File đính kèm ({p.files.length})</p><div className="space-y-1">{p.files.map(f => <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"><span className="text-sm flex-shrink-0">{getFileIcon(f.file_name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.file_name}</span><span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.file_size)}</span><svg className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></a>)}</div></div>)}

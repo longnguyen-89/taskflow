@@ -23,7 +23,7 @@ const MENU = [
 
 export default function AdminPanel({ members, department, onRefresh }) {
   const [section, setSection] = useState('users');
-  const { createUser } = useAuth();
+  const { createUser, user: currentAuthUser, isDirector } = useAuth();
 
   return (
     <div className="animate-fade-in">
@@ -42,7 +42,7 @@ export default function AdminPanel({ members, department, onRefresh }) {
         ))}
       </div>
 
-      {section === 'users' && <UsersSection members={members} department={department} createUser={createUser} onRefresh={onRefresh} />}
+      {section === 'users' && <UsersSection members={members} department={department} createUser={createUser} onRefresh={onRefresh} isDirector={isDirector} currentUserId={currentAuthUser?.id} />}
       {section === 'groups' && <GroupsSection department={department} onRefresh={onRefresh} />}
       {section === 'categories' && <CategoriesSection />}
       {section === 'reports' && <ReportsSection department={department} />}
@@ -51,7 +51,30 @@ export default function AdminPanel({ members, department, onRefresh }) {
   );
 }
 
-function UsersSection({ members, department, createUser, onRefresh }) {
+function UsersSection({ members, department, createUser, onRefresh, isDirector, currentUserId }) {
+
+  async function handleDeleteUser(m) {
+    if (!isDirector) return;
+    if (m.id === currentUserId) { toast('Không thể tự xoá chính mình', 'error'); return; }
+    const ok = typeof window !== 'undefined' && window.confirm(
+      `⚠ XOÁ VĨNH VIỄN tài khoản này?\n\n${m.name} (${m.email})\n\nSẽ xoá: tài khoản đăng nhập, phân quyền, liên kết task/đề xuất, bình luận. KHÔNG thể khôi phục.\n\nLưu ý: nếu user này đã tạo nhiều task/đề xuất, cần xoá các task/đề xuất đó TRƯỚC, nếu không sẽ lỗi khoá ngoại.`
+    );
+    if (!ok) return;
+    try {
+      const res = await fetch('/api/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: m.id, requesterId: currentUserId }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast('Lỗi: ' + data.error, 'error'); return; }
+      toast(`Đã xoá ${m.name}`, 'success');
+      onRefresh && onRefresh();
+    } catch (e) {
+      toast('Lỗi mạng: ' + e.message, 'error');
+    }
+  }
+
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [name, setName] = useState('');
@@ -207,9 +230,14 @@ function UsersSection({ members, department, createUser, onRefresh }) {
                 <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-medium">{m.branches.map(branchLabel).join(', ')}</span>
               )}
               <span className="text-[10px] text-gray-400">{m.position}</span>
-              <button onClick={() => startEdit(m)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+              <button onClick={() => startEdit(m)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Sửa">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
               </button>
+              {isDirector && m.id !== currentUserId && (
+                <button onClick={() => handleDeleteUser(m)} className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600" title="Xoá vĩnh viễn (chỉ TGĐ)">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                </button>
+              )}
             </div>
           );
         })}
