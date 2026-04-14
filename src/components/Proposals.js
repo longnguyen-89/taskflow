@@ -307,7 +307,7 @@ export default function Proposals({ userId, userName, members, department, branc
       `⚠ XOÁ VĨNH VIỄN đề xuất này?\n\n"${pTitle}"\n\nSẽ xoá cả: người duyệt, người theo dõi, file đính kèm, bình luận. KHÔNG thể khôi phục.`
     );
     if (!ok) return;
-    const { error } = await deleteProposalCascade(pid);
+    const { error } = await deleteProposalCascade(pid, userId);
     if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
     toast('Đã xoá đề xuất', 'success');
     fetchAll();

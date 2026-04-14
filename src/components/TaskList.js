@@ -33,7 +33,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, userId, 
       `⚠ XOÁ VĨNH VIỄN task này?\n\n"${taskTitle}"\n\nSẽ xoá cả: sub-task, comment, file đính kèm, checklist, lịch sử. KHÔNG thể khôi phục.`
     );
     if (!ok) return;
-    const { error } = await deleteTaskCascade(taskId);
+    const { error } = await deleteTaskCascade(taskId, userId);
     if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
     toast('Đã xoá task', 'success');
     onRefresh && onRefresh();
