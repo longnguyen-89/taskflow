@@ -66,7 +66,12 @@ export default function Dashboard() {
     const { data: allTasks } = await taskQuery;
 
     let filtered = allTasks || [];
-    if (!isAdmin && !isAccountant) {
+    // Chỉ Tổng GĐ và Kế toán thấy toàn bộ task của phòng ban (để oversight).
+    // Các role khác (admin/quản lý, member/nhân viên) chỉ thấy task của chính mình:
+    //   - được giao (assignee)
+    //   - được thêm theo dõi (watcher)
+    //   - do chính mình tạo
+    if (!isDirector && !isAccountant) {
       filtered = filtered.filter(t =>
         t.assignees?.some(a => a.user_id === user.id) ||
         t.watchers?.some(w => w.user_id === user.id) ||
@@ -86,7 +91,7 @@ export default function Dashboard() {
     setUnreadCount(notifs?.filter(n => !n.read).length || 0);
 
     setLoading(false);
-  }, [user, profile, dept, isAdmin, isAccountant]);
+  }, [user, profile, dept, isDirector, isAccountant]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -203,12 +208,12 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-            <TaskList tasks={approvedTasks} members={members} isAdmin={isAdmin} userId={user.id} onRefresh={fetchData} department={dept} currentUserRole={profile?.role} currentUserName={profile?.name} />
+            <TaskList tasks={approvedTasks} members={members} isAdmin={isDirector || isAccountant} userId={user.id} onRefresh={fetchData} department={dept} currentUserRole={profile?.role} currentUserName={profile?.name} />
           </div>
         )}
         {tab === 'create' && isAdmin && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
         {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} isDirector={isDirector} canApprove={canApprove} />}
-        {tab === 'performance' && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isAdmin} isDirector={isDirector} />}
+        {tab === 'performance' && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isDirector || isAccountant} isDirector={isDirector} />}
         {tab === 'notifications' && <Notifications notifications={notifications} userId={user.id} onRefresh={fetchData} />}
         {tab === 'admin' && isDirector && <AdminPanel members={members} department={dept} onRefresh={fetchData} />}
         {tab === 'recurring' && isAdmin && <RecurringTasks members={members} department={dept} userId={user.id} taskGroups={taskGroups} />}
