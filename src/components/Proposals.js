@@ -35,7 +35,7 @@ const MAIN_TABS = [
   { id: 'thanh_toan', label: 'Thanh toán' },
 ];
 
-export default function Proposals({ userId, userName, members, department, isDirector, canApprove }) {
+export default function Proposals({ userId, userName, members, department, isDirector, isAccountant, canApprove }) {
   const [activeTab, setActiveTab] = useState('mua_hang');
   const [proposals, setProposals] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -179,8 +179,10 @@ export default function Proposals({ userId, userName, members, department, isDir
 
   // Visibility rule: nhân viên/quản lý chỉ thấy đề xuất của chính mình
   // hoặc được thêm vào người duyệt / người theo dõi.
-  // Ngoại lệ: Tổng GĐ và Kế toán (canApprove) thấy hết toàn hệ thống.
-  const visibleProposals = canApprove
+  // Ngoại lệ: Tổng GĐ và Kế toán thấy hết toàn hệ thống.
+  // (Không dùng canApprove vì canApprove bao gồm cả role admin/quản lý)
+  const canViewAll = isDirector || isAccountant;
+  const visibleProposals = canViewAll
     ? proposals
     : proposals.filter(p =>
         p.created_by === userId

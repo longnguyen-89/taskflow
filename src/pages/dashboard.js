@@ -212,7 +212,7 @@ export default function Dashboard() {
           </div>
         )}
         {tab === 'create' && isAdmin && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
-        {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} isDirector={isDirector} canApprove={canApprove} />}
+        {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} isDirector={isDirector} isAccountant={isAccountant} canApprove={canApprove} />}
         {tab === 'performance' && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isDirector || isAccountant} isDirector={isDirector} />}
         {tab === 'notifications' && <Notifications notifications={notifications} userId={user.id} onRefresh={fetchData} />}
         {tab === 'admin' && isDirector && <AdminPanel members={members} department={dept} onRefresh={fetchData} />}
