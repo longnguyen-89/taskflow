@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
@@ -23,12 +23,21 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-export default function TaskList({ tasks, members, isAdmin, userId, onRefresh }) {
+export default function TaskList({ tasks, members, isAdmin, userId, onRefresh, department, currentUserRole, currentUserName }) {
   const [expanded, setExpanded] = useState(null);
   const [comments, setComments] = useState({});
   const [newComment, setNewComment] = useState('');
   const [commentFiles, setCommentFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [mentionedIds, setMentionedIds] = useState([]);
+
+  // Build the list of members the current user is allowed to @mention.
+  // Rule: managers/staff only see people in their own department,
+  // EXCEPT Tổng Giám đốc và Kế toán — they see everyone.
+  const isCEOorAcc = currentUserRole === 'director' || currentUserRole === 'accountant';
+  const mentionables = (members || []).filter(m =>
+    m.id !== userId && (isCEOorAcc || m.department === department || m.role === 'director' || m.role === 'accountant')
+  );
   // Sub-tasks state
   const [subTasks, setSubTasks] = useState({});
   const [showSubForm, setShowSubForm] = useState(null);
@@ -66,11 +75,35 @@ export default function TaskList({ tasks, members, isAdmin, userId, onRefresh })
         uploadedFiles.push({ name: f.name, url: publicUrl, type: f.type, size: f.size });
       }
     }
+    const contentText = newComment.trim();
     await supabase.from('comments').insert({
-      task_id: tid, user_id: userId, content: newComment.trim(),
+      task_id: tid, user_id: userId, content: contentText,
       files: uploadedFiles.length > 0 ? uploadedFiles : null,
     });
-    setNewComment(''); setCommentFiles([]); setUploading(false); loadComments(tid);
+
+    // Notify mentioned users (only those actually referenced in final content)
+    try {
+      const task = tasks.find(t => t.id === tid);
+      const taskTitle = task?.title || '';
+      const uniqueIds = Array.from(new Set(mentionedIds));
+      for (const mid of uniqueIds) {
+        const m = members.find(x => x.id === mid);
+        if (!m) continue;
+        // Verify @Name still appears in content — user may have deleted it
+        if (!contentText.includes('@' + m.name)) continue;
+        if (mid === userId) continue;
+        await supabase.from('notifications').insert({
+          user_id: mid,
+          type: 'mention',
+          title: 'Bạn được nhắc đến',
+          message: `${currentUserName || 'Ai đó'} đã nhắc bạn trong "${taskTitle}"`,
+          task_id: tid,
+        });
+        sendPush(mid, 'Bạn được nhắc đến', `${currentUserName || 'Ai đó'} nhắc bạn trong "${taskTitle}"`, { url: '/dashboard', tag: 'mention-' + tid });
+      }
+    } catch (e) { /* non-fatal */ }
+
+    setNewComment(''); setCommentFiles([]); setMentionedIds([]); setUploading(false); loadComments(tid);
   }
 
   function handleAddCommentFile(e) {
@@ -182,7 +215,7 @@ export default function TaskList({ tasks, members, isAdmin, userId, onRefresh })
                 <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: pct + '%', background: pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626' }} /></div>
                 <span className="text-[10px] font-bold text-gray-400 w-8 text-right">{pct}%</span>
               </div>
-              <div className="space-y-1.5">{g.tasks.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} nc={newComment} setNc={setNewComment} addC={addComment} uid={userId} commentFiles={commentFiles} setCommentFiles={setCommentFiles} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} />)}</div>
+              <div className="space-y-1.5">{g.tasks.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} nc={newComment} setNc={setNewComment} addC={addComment} uid={userId} commentFiles={commentFiles} setCommentFiles={setCommentFiles} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} mentionables={mentionables} mentionedIds={mentionedIds} setMentionedIds={setMentionedIds} />)}</div>
             </div>
           );
         })}
@@ -195,8 +228,8 @@ export default function TaskList({ tasks, members, isAdmin, userId, onRefresh })
   const done = parentTasks.filter(t => t.status === 'done');
   return (
     <div className="space-y-4">
-      {todo.length > 0 && <div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Cần làm ({todo.length})</p><div className="space-y-1.5">{todo.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} nc={newComment} setNc={setNewComment} addC={addComment} uid={userId} commentFiles={commentFiles} setCommentFiles={setCommentFiles} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} />)}</div></div>}
-      {done.length > 0 && <div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Đã xong ({done.length})</p><div className="space-y-1.5 opacity-50">{done.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} nc={newComment} setNc={setNewComment} addC={addComment} uid={userId} commentFiles={commentFiles} setCommentFiles={setCommentFiles} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} />)}</div></div>}
+      {todo.length > 0 && <div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Cần làm ({todo.length})</p><div className="space-y-1.5">{todo.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} nc={newComment} setNc={setNewComment} addC={addComment} uid={userId} commentFiles={commentFiles} setCommentFiles={setCommentFiles} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} mentionables={mentionables} mentionedIds={mentionedIds} setMentionedIds={setMentionedIds} />)}</div></div>}
+      {done.length > 0 && <div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Đã xong ({done.length})</p><div className="space-y-1.5 opacity-50">{done.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} nc={newComment} setNc={setNewComment} addC={addComment} uid={userId} commentFiles={commentFiles} setCommentFiles={setCommentFiles} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} mentionables={mentionables} mentionedIds={mentionedIds} setMentionedIds={setMentionedIds} />)}</div></div>}
       {parentTasks.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">Chưa có task</div>}
     </div>
   );
@@ -222,7 +255,7 @@ function FileList({ files }) {
   );
 }
 
-function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, comments, nc, setNc, addC, uid, commentFiles, handleAddCommentFile, removeCommentFile, uploading, subTasks, showSubForm, setShowSubForm, subTitle, setSubTitle, subDeadline, setSubDeadline, subFiles, handleAddSubFile, removeSubFile, createSubTask, subCreating, expandedSub, setExpandedSub, updateSubStatus, isAdmin }) {
+function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, comments, nc, setNc, addC, uid, commentFiles, handleAddCommentFile, removeCommentFile, uploading, subTasks, showSubForm, setShowSubForm, subTitle, setSubTitle, subDeadline, setSubDeadline, subFiles, handleAddSubFile, removeSubFile, createSubTask, subCreating, expandedSub, setExpandedSub, updateSubStatus, isAdmin, mentionables, mentionedIds, setMentionedIds }) {
   const st = ST[t.status] || ST.todo;
   const pr = PR[t.priority] || PR.medium;
   const od = isOverdue(t.deadline, t.status);
@@ -369,14 +402,21 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                 <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0 mt-0.5" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>
-                  {c.content && <p className="text-xs text-gray-600">{c.content}</p>}
+                  {c.content && <p className="text-xs text-gray-600 whitespace-pre-wrap">{renderMentions(c.content, mentionables)}</p>}
                   {c.files && c.files.length > 0 && <FileList files={c.files} />}
                 </div>
               </div>
             ))}
             <div className="space-y-1.5 mt-1.5">
               <div className="flex gap-2">
-                <input className="input-field !py-1.5 !text-xs flex-1" placeholder="Bình luận..." value={exp ? nc : ''} onChange={e => setNc(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && addC(t.id)} />
+                <CommentInput
+                  value={exp ? nc : ''}
+                  setValue={setNc}
+                  onSend={() => addC(t.id)}
+                  mentionables={mentionables || []}
+                  onMention={(userId) => setMentionedIds(prev => prev.includes(userId) ? prev : [...prev, userId])}
+                  ini={ini}
+                />
                 <label className="flex items-center px-2 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer text-gray-500" title="Đính kèm file">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   <input type="file" multiple className="hidden" onChange={handleAddCommentFile} />
@@ -401,6 +441,132 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
               )}
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Render comment content with @Name highlighted as a styled chip
+function renderMentions(text, mentionables) {
+  if (!text) return null;
+  // Sort names by length desc so longer names match first (e.g. "Truc Nguyen" before "Truc")
+  const names = (mentionables || []).map(m => m.name).filter(Boolean).sort((a, b) => b.length - a.length);
+  if (names.length === 0) return text;
+  const escaped = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp('@(' + escaped.join('|') + ')', 'g');
+  const parts = [];
+  let last = 0; let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(<span key={m.index} className="text-blue-600 font-semibold bg-blue-50 px-1 rounded">@{m[1]}</span>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
+// Input field with @mention autocomplete dropdown.
+// Shows a list of mentionable users when user types "@" followed by letters.
+function CommentInput({ value, setValue, onSend, mentionables, onMention, ini }) {
+  const inputRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [anchor, setAnchor] = useState(0); // index where @ starts
+  const [selIdx, setSelIdx] = useState(0);
+
+  // Remove Vietnamese diacritics for search convenience
+  const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+  const filtered = open
+    ? mentionables.filter(m => {
+        if (!query) return true;
+        return norm(m.name).includes(norm(query));
+      }).slice(0, 8)
+    : [];
+
+  useEffect(() => { setSelIdx(0); }, [query, open]);
+
+  function handleChange(e) {
+    const val = e.target.value;
+    const caret = e.target.selectionStart || val.length;
+    setValue(val);
+    // Detect if caret is inside a pending @mention
+    const upto = val.slice(0, caret);
+    const atIdx = upto.lastIndexOf('@');
+    if (atIdx >= 0) {
+      const before = atIdx === 0 ? ' ' : upto[atIdx - 1];
+      const isBoundary = /\s/.test(before) || atIdx === 0;
+      const q = upto.slice(atIdx + 1);
+      // Cancel if user typed a space — mention tokens cannot contain whitespace-only separators
+      if (isBoundary && !/\s$/.test(q)) {
+        setOpen(true); setQuery(q); setAnchor(atIdx);
+        return;
+      }
+    }
+    setOpen(false); setQuery('');
+  }
+
+  function pickMention(member) {
+    if (!member) return;
+    const val = value || '';
+    const before = val.slice(0, anchor);
+    const afterIdx = anchor + 1 + query.length;
+    const after = val.slice(afterIdx);
+    const insert = '@' + member.name + ' ';
+    const newVal = before + insert + after;
+    setValue(newVal);
+    setOpen(false); setQuery('');
+    if (onMention) onMention(member.id);
+    // Restore focus and place caret after inserted mention
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        const pos = (before + insert).length;
+        try { inputRef.current.setSelectionRange(pos, pos); } catch (e) {}
+      }
+    }, 0);
+  }
+
+  function handleKeyDown(e) {
+    if (open && filtered.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(i => (i + 1) % filtered.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSelIdx(i => (i - 1 + filtered.length) % filtered.length); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(filtered[selIdx]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setOpen(false); return; }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend && onSend(); }
+  }
+
+  return (
+    <div className="relative flex-1">
+      <input
+        ref={inputRef}
+        className="input-field !py-1.5 !text-xs w-full"
+        placeholder="Bình luận... (gõ @ để nhắc tên)"
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute bottom-full left-0 mb-1 w-64 max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+          {filtered.map((m, i) => (
+            <div
+              key={m.id}
+              onMouseDown={(e) => { e.preventDefault(); pickMention(m); }}
+              className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer text-xs ${i === selIdx ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}
+            >
+              <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: m.avatar_color || '#f3f4f6', color: '#333' }}>{ini(m.name)}</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{m.name}</p>
+                <p className="text-[9px] text-gray-400 truncate">
+                  {m.role === 'director' ? 'Tổng Giám đốc' : m.role === 'accountant' ? 'Kế toán' : (m.position || '')}
+                  {m.department ? ` · ${m.department === 'hotel' ? 'Hotel' : 'Nail'}` : ''}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
