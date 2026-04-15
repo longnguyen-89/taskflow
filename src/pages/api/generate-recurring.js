@@ -141,6 +141,21 @@ export default async function handler(req, res) {
         }));
         await supabase.from('task_checklist').insert(chkRows);
       }
+
+      // File đính kèm mặc định — copy URL sang task_files (cùng file dùng chung, không upload lại)
+      if (Array.isArray(r.default_files) && r.default_files.length > 0) {
+        const fileRows = r.default_files
+          .filter(f => f && f.file_url)
+          .map(f => ({
+            task_id: task.id,
+            file_name: f.file_name,
+            file_url: f.file_url,
+            file_type: f.file_type || null,
+            file_size: f.file_size || null,
+            uploaded_by: r.created_by,
+          }));
+        if (fileRows.length > 0) await supabase.from('task_files').insert(fileRows);
+      }
     }
 
     if (createdTaskIds.length === 0) {

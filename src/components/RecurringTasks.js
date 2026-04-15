@@ -17,6 +17,22 @@ const PR = { high: 'Cao', medium: 'TB', low: 'Thấp' };
 const NEEDS_MONTHDAY = new Set(['monthly', 'quarterly', 'semiannual', 'yearly']);
 const NEEDS_MONTH_OF_YEAR = new Set(['quarterly', 'semiannual', 'yearly']);
 
+function getFileIcon(name) {
+  const ext = (name || '').toLowerCase();
+  if (ext.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/)) return '🖼';
+  if (ext.match(/\.pdf$/)) return '📄';
+  if (ext.match(/\.(doc|docx)$/)) return '📝';
+  if (ext.match(/\.(xls|xlsx|csv)$/)) return '📊';
+  if (ext.match(/\.(ppt|pptx)$/)) return '📽';
+  return '📎';
+}
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 export default function RecurringTasks({ members, department, userId, taskGroups }) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +54,10 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   const [assignees, setAssignees] = useState([]);
   const [watchers, setWatchers] = useState([]);
   const [chkLines, setChkLines] = useState('');
+  // File mới chọn (chưa upload) + file đã có sẵn của template
+  const [newFiles, setNewFiles] = useState([]);
+  const [existingFiles, setExistingFiles] = useState([]); // [{file_name, file_url, file_type, file_size}]
+  const [uploading, setUploading] = useState(false);
 
   const deptMembers = members.filter(m => m.department === department || m.role === 'director' || m.role === 'accountant');
 
@@ -55,8 +75,17 @@ export default function RecurringTasks({ members, department, userId, taskGroups
     setFrequency('daily'); setWeekday(1); setMonthday(1); setMonthOfYear(1);
     setHour(18); setMinute(0); setDaysOffset(0);
     setAssignees([]); setWatchers([]); setChkLines('');
+    setNewFiles([]); setExistingFiles([]);
     setEditing(null);
   }
+
+  function handleAddFile(e) {
+    const list = Array.from(e.target.files || []);
+    if (list.length > 0) setNewFiles(p => [...p, ...list]);
+    e.target.value = '';
+  }
+  function removeNewFile(i) { setNewFiles(p => p.filter((_, idx) => idx !== i)); }
+  function removeExistingFile(i) { setExistingFiles(p => p.filter((_, idx) => idx !== i)); }
 
   function openEdit(r) {
     setEditing(r);
@@ -66,6 +95,8 @@ export default function RecurringTasks({ members, department, userId, taskGroups
     setAssignees(r.assignee_ids || []);
     setWatchers(r.watcher_ids || []);
     setChkLines((r.default_checklist || []).join('\n'));
+    setExistingFiles(Array.isArray(r.default_files) ? r.default_files : []);
+    setNewFiles([]);
     setShowForm(true);
   }
 
@@ -73,6 +104,21 @@ export default function RecurringTasks({ members, department, userId, taskGroups
     if (!title.trim()) return toast('Nhập tiêu đề', 'error');
     if (assignees.length === 0) return toast('Chọn ít nhất 1 người', 'error');
     const checklist = chkLines.split('\n').map(s => s.trim()).filter(Boolean);
+
+    // Upload các file mới chọn lên storage, gộp với file đã có
+    setUploading(true);
+    const uploaded = [];
+    for (const f of newFiles) {
+      const safeName = f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+      const path = `recurring/${userId}/${Date.now()}_${safeName}`;
+      const { error: ue } = await supabase.storage.from('attachments').upload(path, f);
+      if (ue) { setUploading(false); return toast('Lỗi upload file: ' + ue.message, 'error'); }
+      const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(path);
+      uploaded.push({ file_name: f.name, file_url: publicUrl, file_type: f.type, file_size: f.size });
+    }
+    setUploading(false);
+    const allFiles = [...existingFiles, ...uploaded];
+
     const payload = {
       title: title.trim(), description: desc.trim() || null, priority,
       department, group_id: groupId || null,
@@ -85,6 +131,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
       assignee_ids: assignees,
       watcher_ids: watchers,
       default_checklist: checklist,
+      default_files: allFiles,
       active: true,
     };
     if (editing) {
@@ -272,9 +319,42 @@ export default function RecurringTasks({ members, department, userId, taskGroups
             <p className="text-[10px] text-gray-400 mt-1">Mỗi lần task được sinh, các bước này sẽ tự động xuất hiện trong checklist.</p>
           </div>
 
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-1">Đính kèm mặc định (file/hình — tùy chọn)</label>
+            <div className="space-y-1.5">
+              {existingFiles.map((f, i) => (
+                <div key={'e' + i} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50">
+                  <span className="text-sm flex-shrink-0">{getFileIcon(f.file_name)}</span>
+                  <a href={f.file_url} target="_blank" rel="noreferrer" className="text-xs text-gray-700 truncate flex-1 hover:text-emerald-700 hover:underline">{f.file_name}</a>
+                  <span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.file_size)}</span>
+                  <button type="button" onClick={() => removeExistingFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0" title="Bỏ file này khỏi template">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ))}
+              {newFiles.map((f, i) => (
+                <div key={'n' + i} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50">
+                  <span className="text-sm flex-shrink-0">{getFileIcon(f.name)}</span>
+                  <span className="text-xs text-gray-700 truncate flex-1">{f.name}</span>
+                  <span className="text-[9px] text-emerald-700 flex-shrink-0 font-semibold">MỚI</span>
+                  <span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.size)}</span>
+                  <button type="button" onClick={() => removeNewFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0" title="Xóa file">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ))}
+              <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer transition-colors">
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                <span className="text-xs text-gray-500">Chọn file (có thể chọn nhiều)</span>
+                <input type="file" multiple className="hidden" onChange={handleAddFile} />
+              </label>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">Mỗi lần task được sinh, các file này sẽ tự đính kèm vào task. Phù hợp cho mẫu form, hình hướng dẫn, checklist PDF.</p>
+          </div>
+
           <div className="flex gap-2 justify-end">
             <button onClick={() => { setShowForm(false); resetForm(); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">Hủy</button>
-            <button onClick={save} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#2D5A3D' }}>{editing ? 'Cập nhật' : 'Tạo'}</button>
+            <button onClick={save} disabled={uploading} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>{uploading ? 'Đang upload...' : (editing ? 'Cập nhật' : 'Tạo')}</button>
           </div>
         </div>
       )}
@@ -295,7 +375,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
                     {!r.active && <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-semibold">TẠM DỪNG</span>}
                   </div>
                   <p className="text-[11px] text-gray-500 mt-0.5">{describeSchedule(r)}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{(r.assignee_ids || []).length} người làm · {(r.watcher_ids || []).length} theo dõi · {(r.default_checklist || []).length} bước checklist · sinh lần cuối: {r.last_generated_date || 'chưa'}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{(r.assignee_ids || []).length} người làm · {(r.watcher_ids || []).length} theo dõi · {(r.default_checklist || []).length} bước · {(Array.isArray(r.default_files) ? r.default_files.length : 0)} file · sinh lần cuối: {r.last_generated_date || 'chưa'}</p>
                 </div>
                 <div className="flex flex-col gap-1">
                   <button onClick={() => openEdit(r)} className="text-[10px] px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100">Sửa</button>
