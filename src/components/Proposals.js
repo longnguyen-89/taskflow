@@ -144,7 +144,7 @@ const MAIN_TABS = [
   { id: 'thanh_toan', label: 'Thanh toán' },
 ];
 
-export default function Proposals({ userId, userName, members, department, branch, allowedBranches, canViewAll: canViewAllProp, profile, isDirector, isAccountant, canApprove }) {
+export default function Proposals({ userId, userName, members, department, branch, allowedBranches, canViewAll: canViewAllProp, profile, isDirector, isAccountant, canApprove, focusProposalId, clearFocus }) {
   // Chi nhánh được chọn khi tạo đề xuất mới. Mặc định = chi nhánh đang xem,
   // hoặc chi nhánh duy nhất của user nếu chỉ có 1.
   const defaultCreateBranch = branch || (department === 'nail' && profile?.branches?.length === 1 ? profile.branches[0] : '');
@@ -369,6 +369,34 @@ export default function Proposals({ userId, userName, members, department, branc
   const subCatCounts = {};
   tabProposals.forEach(p => { subCatCounts[p.category_name] = (subCatCounts[p.category_name] || 0) + 1; });
 
+  // Auto expand + scroll khi mở đề xuất từ notification.
+  useEffect(() => {
+    if (!focusProposalId) return;
+    const target = proposals.find(p => p.id === focusProposalId);
+    if (!target) return;
+    // Chuyển đúng main tab (mua hàng / thanh toán) để đề xuất hiển thị.
+    if (target.category_name === 'Thanh toán') {
+      if (activeTab !== 'thanh_toan') setActiveTab('thanh_toan');
+    } else {
+      if (activeTab !== 'mua_hang') setActiveTab('mua_hang');
+    }
+    // Reset filter category để chắc chắn render.
+    if (filterCat !== 'all' && target.category_name !== filterCat) setFilterCat('all');
+    setExpanded(focusProposalId);
+    if (!comments[focusProposalId]) loadComments(focusProposalId);
+    const to = setTimeout(() => {
+      const el = document.getElementById('proposal-row-' + focusProposalId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-emerald-400');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-emerald-400'), 2500);
+      }
+      if (clearFocus) clearFocus();
+    }, 300);
+    return () => clearTimeout(to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusProposalId, proposals]);
+
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-4">
@@ -513,7 +541,7 @@ export default function Proposals({ userId, userName, members, department, branc
         {filteredProposals.map(p => {
           const sc = STS[p.status]; const isExp = expanded === p.id;
           return (
-            <div key={p.id} className="card p-4">
+            <div key={p.id} id={'proposal-row-' + p.id} className="card p-4 transition-all">
               <div className="flex items-start gap-3 cursor-pointer" onClick={() => { setExpanded(isExp ? null : p.id); if (!isExp && !comments[p.id]) loadComments(p.id); }}>
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 mt-0.5" style={{ background: p.creator?.avatar_color, color: '#333' }}>{ini(p.creator?.name)}</div>
                 <div className="flex-1 min-w-0">

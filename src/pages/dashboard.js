@@ -29,6 +29,38 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [showSearch, setShowSearch] = useState(false);
   const [appearance, setAppearance] = useState({ primaryColor: '#2D5A3D', bgUrl: '', bannerText: '', bannerColor: '#2D5A3D', bannerEnabled: false });
+  const [focusTaskId, setFocusTaskId] = useState(null);
+  const [focusProposalId, setFocusProposalId] = useState(null);
+
+  // Khi click vào 1 thông báo -> chuyển tab & focus vào task/proposal tương ứng.
+  const handleOpenNotification = useCallback(async (n) => {
+    if (!n) return;
+    if (n.task_id) {
+      // Lấy task để biết department/branch rồi chuyển tab Dashboard + focus.
+      const { data: tk } = await supabase.from('tasks').select('id, department, branch, parent_id').eq('id', n.task_id).maybeSingle();
+      if (tk) {
+        if (tk.department && tk.department !== dept) setDept(tk.department);
+        if (tk.department === 'nail' && tk.branch && canViewAll) setBranch(tk.branch);
+        // Nếu là sub-task, focus vào parent.
+        setFocusTaskId(tk.parent_id || tk.id);
+        setTab('dashboard');
+      } else {
+        setFocusTaskId(n.task_id);
+        setTab('dashboard');
+      }
+    } else if (n.proposal_id) {
+      const { data: pr } = await supabase.from('proposals').select('id, department, branch').eq('id', n.proposal_id).maybeSingle();
+      if (pr) {
+        if (pr.department && pr.department !== dept) setDept(pr.department);
+        if (pr.department === 'nail' && pr.branch && canViewAll) setBranch(pr.branch);
+        setFocusProposalId(pr.id);
+        setTab('proposals');
+      } else {
+        setFocusProposalId(n.proposal_id);
+        setTab('proposals');
+      }
+    }
+  }, [dept, canViewAll]);
 
   useEffect(() => {
     supabase.from('app_settings').select('value').eq('key', 'appearance').single().then(({ data }) => {
@@ -264,13 +296,13 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-            <TaskList tasks={approvedTasks} members={members} isAdmin={isDirector || isAccountant} isDirector={isDirector} userId={user.id} onRefresh={fetchData} department={dept} currentUserRole={profile?.role} currentUserName={profile?.name} />
+            <TaskList tasks={approvedTasks} members={members} isAdmin={isDirector || isAccountant} isDirector={isDirector} userId={user.id} onRefresh={fetchData} department={dept} currentUserRole={profile?.role} currentUserName={profile?.name} focusTaskId={focusTaskId} clearFocus={() => setFocusTaskId(null)} />
           </div>
         )}
         {tab === 'create' && isAdmin && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
-        {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} profile={profile} isDirector={isDirector} isAccountant={isAccountant} canApprove={canApprove} />}
+        {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} profile={profile} isDirector={isDirector} isAccountant={isAccountant} canApprove={canApprove} focusProposalId={focusProposalId} clearFocus={() => setFocusProposalId(null)} />}
         {tab === 'performance' && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isDirector || isAccountant} isDirector={isDirector} />}
-        {tab === 'notifications' && <Notifications notifications={notifications} userId={user.id} onRefresh={fetchData} />}
+        {tab === 'notifications' && <Notifications notifications={notifications} userId={user.id} onRefresh={fetchData} onOpen={handleOpenNotification} />}
         {tab === 'admin' && isDirector && <AdminPanel members={members} department={dept} onRefresh={fetchData} />}
         {tab === 'recurring' && isAdmin && <RecurringTasks members={members} department={dept} userId={user.id} taskGroups={taskGroups} />}
       </main>

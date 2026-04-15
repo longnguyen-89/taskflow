@@ -24,7 +24,7 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-export default function TaskList({ tasks, members, isAdmin, isDirector, userId, onRefresh, department, currentUserRole, currentUserName }) {
+export default function TaskList({ tasks, members, isAdmin, isDirector, userId, onRefresh, department, currentUserRole, currentUserName, focusTaskId, clearFocus }) {
 
   // Xoá task cứng (chỉ TGĐ). Có confirm 2 bước.
   async function deleteTask(taskId, taskTitle) {
@@ -255,6 +255,30 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, userId, 
     if (!checklist[tid]) loadChecklist(tid);
   }
 
+  // Auto expand + scroll khi mở task từ notification.
+  useEffect(() => {
+    if (!focusTaskId) return;
+    // Kiểm tra task có trong list không (có thể bị filter theo dept/branch).
+    const exists = tasks.some(t => t.id === focusTaskId || t.parent_id === focusTaskId);
+    if (!exists) return;
+    setExpanded(focusTaskId);
+    if (!comments[focusTaskId]) loadComments(focusTaskId);
+    if (!subTasks[focusTaskId]) loadSubTasks(focusTaskId);
+    if (!checklist[focusTaskId]) loadChecklist(focusTaskId);
+    // Scroll sau khi DOM render.
+    const to = setTimeout(() => {
+      const el = document.getElementById('task-row-' + focusTaskId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-emerald-400');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-emerald-400'), 2500);
+      }
+      if (clearFocus) clearFocus();
+    }, 250);
+    return () => clearTimeout(to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTaskId, tasks]);
+
   const ini = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
   const fmtDT = d => { if (!d) return ''; const dt = new Date(d); return dt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); };
   const fmtDate = d => d ? new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) : '';
@@ -380,7 +404,7 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
   const hasSubs = subs.length > 0;
 
   return (
-    <div className={`border rounded-xl transition-all ${od ? 'border-l-[3px] border-l-red-500 border-red-200' : 'border-gray-100'} ${exp ? 'bg-gray-50/50' : 'bg-white hover:bg-gray-50/30'}`}>
+    <div id={'task-row-' + t.id} className={`border rounded-xl transition-all ${od ? 'border-l-[3px] border-l-red-500 border-red-200' : 'border-gray-100'} ${exp ? 'bg-gray-50/50' : 'bg-white hover:bg-gray-50/30'}`}>
       <div className="flex items-center gap-2 p-3 cursor-pointer" onClick={toggle}>
         <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: st.c }} />
         <p className={`text-sm font-medium flex-1 truncate ${t.status === 'done' ? 'line-through text-gray-400' : ''}`}>{t.title}</p>
