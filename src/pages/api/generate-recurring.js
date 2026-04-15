@@ -31,6 +31,7 @@ export default async function handler(req, res) {
   const today = ymd(vn);
   const weekday = vn.getUTCDay();   // 0=CN..6=T7 (sau khi shift +7h, dùng UTC* methods)
   const monthday = vn.getUTCDate();
+  const monthOfYear = vn.getUTCMonth() + 1; // 1..12
 
   const { data: templates, error } = await supabase
     .from('recurring_tasks')
@@ -50,6 +51,18 @@ export default async function handler(req, res) {
     if (r.frequency === 'daily') matches = true;
     else if (r.frequency === 'weekly') matches = r.weekday === weekday;
     else if (r.frequency === 'monthly') matches = r.monthday === monthday;
+    else if (r.frequency === 'quarterly') {
+      // Sinh mỗi 3 tháng kể từ month_of_year
+      const ref = r.month_of_year || 1;
+      matches = r.monthday === monthday && ((monthOfYear - ref) % 3 + 3) % 3 === 0;
+    }
+    else if (r.frequency === 'semiannual') {
+      const ref = r.month_of_year || 1;
+      matches = r.monthday === monthday && ((monthOfYear - ref) % 6 + 6) % 6 === 0;
+    }
+    else if (r.frequency === 'yearly') {
+      matches = r.monthday === monthday && (r.month_of_year || 1) === monthOfYear;
+    }
     if (!matches) { skipped.push({ id: r.id, reason: 'no_match_today' }); continue; }
 
     // Build deadline = (today + days_offset) at HH:MM Vietnam time → ISO UTC

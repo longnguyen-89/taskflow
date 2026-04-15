@@ -6,9 +6,16 @@ const FREQ = {
   daily: 'Hằng ngày',
   weekly: 'Hằng tuần',
   monthly: 'Hằng tháng',
+  quarterly: 'Mỗi 3 tháng (định kỳ quý)',
+  semiannual: 'Mỗi 6 tháng (nửa năm)',
+  yearly: 'Hằng năm (1 năm 1 lần)',
 };
 const WEEKDAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+const MONTHS = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
 const PR = { high: 'Cao', medium: 'TB', low: 'Thấp' };
+// Các tần suất cần ngày trong tháng + tháng tham chiếu
+const NEEDS_MONTHDAY = new Set(['monthly', 'quarterly', 'semiannual', 'yearly']);
+const NEEDS_MONTH_OF_YEAR = new Set(['quarterly', 'semiannual', 'yearly']);
 
 export default function RecurringTasks({ members, department, userId, taskGroups }) {
   const [list, setList] = useState([]);
@@ -24,6 +31,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   const [frequency, setFrequency] = useState('daily');
   const [weekday, setWeekday] = useState(1);
   const [monthday, setMonthday] = useState(1);
+  const [monthOfYear, setMonthOfYear] = useState(1);
   const [hour, setHour] = useState(18);
   const [minute, setMinute] = useState(0);
   const [daysOffset, setDaysOffset] = useState(0);
@@ -44,7 +52,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
 
   function resetForm() {
     setTitle(''); setDesc(''); setPriority('medium'); setGroupId('');
-    setFrequency('daily'); setWeekday(1); setMonthday(1);
+    setFrequency('daily'); setWeekday(1); setMonthday(1); setMonthOfYear(1);
     setHour(18); setMinute(0); setDaysOffset(0);
     setAssignees([]); setWatchers([]); setChkLines('');
     setEditing(null);
@@ -53,7 +61,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   function openEdit(r) {
     setEditing(r);
     setTitle(r.title); setDesc(r.description || ''); setPriority(r.priority); setGroupId(r.group_id || '');
-    setFrequency(r.frequency); setWeekday(r.weekday ?? 1); setMonthday(r.monthday ?? 1);
+    setFrequency(r.frequency); setWeekday(r.weekday ?? 1); setMonthday(r.monthday ?? 1); setMonthOfYear(r.month_of_year ?? 1);
     setHour(r.deadline_hour); setMinute(r.deadline_minute); setDaysOffset(r.deadline_days_offset || 0);
     setAssignees(r.assignee_ids || []);
     setWatchers(r.watcher_ids || []);
@@ -70,7 +78,8 @@ export default function RecurringTasks({ members, department, userId, taskGroups
       department, group_id: groupId || null,
       frequency,
       weekday: frequency === 'weekly' ? weekday : null,
-      monthday: frequency === 'monthly' ? monthday : null,
+      monthday: NEEDS_MONTHDAY.has(frequency) ? monthday : null,
+      month_of_year: NEEDS_MONTH_OF_YEAR.has(frequency) ? monthOfYear : null,
       deadline_hour: parseInt(hour), deadline_minute: parseInt(minute),
       deadline_days_offset: parseInt(daysOffset) || 0,
       assignee_ids: assignees,
@@ -110,6 +119,18 @@ export default function RecurringTasks({ members, department, userId, taskGroups
     if (r.frequency === 'daily') return `Mỗi ngày, ${dtText}`;
     if (r.frequency === 'weekly') return `Mỗi ${WEEKDAYS[r.weekday]} hàng tuần, ${dtText}`;
     if (r.frequency === 'monthly') return `Ngày ${r.monthday} hàng tháng, ${dtText}`;
+    if (r.frequency === 'quarterly') {
+      const m = r.month_of_year || 1;
+      const months = [m, ((m - 1 + 3) % 12) + 1, ((m - 1 + 6) % 12) + 1, ((m - 1 + 9) % 12) + 1].sort((a, b) => a - b);
+      return `Ngày ${r.monthday}, mỗi 3 tháng (T${months.join(', T')}), ${dtText}`;
+    }
+    if (r.frequency === 'semiannual') {
+      const m = r.month_of_year || 1;
+      const m2 = ((m - 1 + 6) % 12) + 1;
+      const months = [m, m2].sort((a, b) => a - b);
+      return `Ngày ${r.monthday}, mỗi 6 tháng (T${months.join(' & T')}), ${dtText}`;
+    }
+    if (r.frequency === 'yearly') return `Ngày ${r.monthday} ${MONTHS[(r.month_of_year || 1) - 1]} hằng năm, ${dtText}`;
     return '';
   }
 
@@ -157,11 +178,39 @@ export default function RecurringTasks({ members, department, userId, taskGroups
             </div>
           )}
 
-          {frequency === 'monthly' && (
-            <div>
-              <label className="block text-[10px] text-gray-500 mb-0.5">Ngày trong tháng (1-31)</label>
-              <input type="number" min={1} max={31} className="input-field !text-xs" value={monthday} onChange={e => setMonthday(parseInt(e.target.value) || 1)} />
+          {NEEDS_MONTHDAY.has(frequency) && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-0.5">Ngày trong tháng (1-31)</label>
+                <input type="number" min={1} max={31} className="input-field !text-xs" value={monthday} onChange={e => setMonthday(parseInt(e.target.value) || 1)} />
+              </div>
+              {NEEDS_MONTH_OF_YEAR.has(frequency) && (
+                <div>
+                  <label className="block text-[10px] text-gray-500 mb-0.5">
+                    {frequency === 'yearly' ? 'Tháng trong năm' : 'Tháng tham chiếu (mốc bắt đầu)'}
+                  </label>
+                  <select className="input-field !text-xs" value={monthOfYear} onChange={e => setMonthOfYear(parseInt(e.target.value) || 1)}>
+                    {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
+          )}
+
+          {frequency === 'quarterly' && (
+            <p className="text-[10px] text-gray-500 -mt-1">
+              → Sẽ sinh ngày {monthday} của: T{monthOfYear}, T{((monthOfYear - 1 + 3) % 12) + 1}, T{((monthOfYear - 1 + 6) % 12) + 1}, T{((monthOfYear - 1 + 9) % 12) + 1}.
+            </p>
+          )}
+          {frequency === 'semiannual' && (
+            <p className="text-[10px] text-gray-500 -mt-1">
+              → Sẽ sinh ngày {monthday} của: T{monthOfYear} và T{((monthOfYear - 1 + 6) % 12) + 1}.
+            </p>
+          )}
+          {frequency === 'yearly' && (
+            <p className="text-[10px] text-gray-500 -mt-1">
+              → Sẽ sinh đúng ngày {monthday}/{monthOfYear} mỗi năm.
+            </p>
           )}
 
           <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-200">
