@@ -208,28 +208,31 @@ export default function Dashboard() {
         </div>
       )}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: 'linear-gradient(135deg, #2D5A3D, #4A7C5C)' }}>
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 h-12 sm:h-14 flex items-center gap-2 sm:gap-3">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-white flex-shrink-0" style={{ background: 'linear-gradient(135deg, #2D5A3D, #4A7C5C)' }}>
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
               <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="2" />
             </svg>
           </div>
-          <h1 className="font-display font-bold text-base" style={{ color: '#2D5A3D' }}>CCE - TasksFlow</h1>
+          <h1 className="font-display font-bold text-sm sm:text-base truncate" style={{ color: '#2D5A3D' }}>
+            <span className="hidden sm:inline">CCE - </span>TasksFlow
+          </h1>
 
+          {/* Nail/Hotel — pills (desktop + mobile, vẫn đủ gọn) */}
           {canViewAll ? (
-            <div className="flex ml-3 p-0.5 rounded-lg" style={{ background: '#f0ebe4' }}>
+            <div className="flex ml-1 sm:ml-3 p-0.5 rounded-lg flex-shrink-0" style={{ background: '#f0ebe4' }}>
               {[{ id: 'nail', l: 'Nail' }, { id: 'hotel', l: 'Hotel' }].map(d => (
                 <button key={d.id} onClick={() => { setDept(d.id); setBranch(null); }}
-                  className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${dept === d.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>{d.l}</button>
+                  className={`px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-semibold transition-all ${dept === d.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>{d.l}</button>
               ))}
             </div>
           ) : (
-            <span className="ml-3 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white shadow-sm text-gray-700">{dept === 'hotel' ? 'Hotel' : 'Nail'}</span>
+            <span className="ml-1 sm:ml-3 px-2.5 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-white shadow-sm text-gray-700 flex-shrink-0">{dept === 'hotel' ? 'Hotel' : 'Nail'}</span>
           )}
 
-          {/* Branch switcher (chỉ hiển thị khi xem Nail và có nhiều hơn 1 chi nhánh truy cập được) */}
+          {/* Branch switcher — desktop pills */}
           {dept === 'nail' && allowedBranches.length > 1 && (
-            <div className="flex p-0.5 rounded-lg ml-1" style={{ background: '#f0ebe4' }}>
+            <div className="hidden md:flex p-0.5 rounded-lg ml-1" style={{ background: '#f0ebe4' }}>
               {canViewAll && (
                 <button onClick={() => setBranch(null)}
                   className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${branch === null ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
@@ -244,32 +247,48 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+          {/* Branch switcher — mobile dropdown (gọn, tiết kiệm diện tích) */}
+          {dept === 'nail' && allowedBranches.length > 1 && (
+            <select
+              value={branch || ''}
+              onChange={e => setBranch(e.target.value || null)}
+              className="md:hidden ml-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-white shadow-sm text-gray-800 border border-gray-200 flex-shrink-0 max-w-[110px] focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              aria-label="Chọn chi nhánh"
+            >
+              {canViewAll && <option value="">Tất cả CN</option>}
+              {NAIL_BRANCHES.filter(b => allowedBranches.includes(b.id)).map(b => (
+                <option key={b.id} value={b.id}>{b.label}</option>
+              ))}
+            </select>
+          )}
           {dept === 'nail' && !canViewAll && allowedBranches.length === 1 && (
-            <span className="ml-1 px-2.5 py-1.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700">
+            <span className="ml-1 px-2 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-[11px] font-semibold bg-emerald-50 text-emerald-700 flex-shrink-0">
               {branchLabel(allowedBranches[0])}
             </span>
           )}
 
           <div className="flex-1" />
 
-          <button onClick={() => setShowSearch(true)} className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg text-xs text-gray-500 hover:bg-gray-200">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            Tìm kiếm <kbd className="hidden sm:inline px-1 py-0.5 bg-white rounded text-[10px] text-gray-400 border">Ctrl+K</kbd>
+          {/* Search: icon-only trên mobile */}
+          <button onClick={() => setShowSearch(true)} className="flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-gray-100 rounded-lg text-xs text-gray-500 hover:bg-gray-200 flex-shrink-0" title="Tìm kiếm">
+            <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <span className="hidden sm:inline">Tìm kiếm</span>
+            <kbd className="hidden lg:inline px-1 py-0.5 bg-white rounded text-[10px] text-gray-400 border">Ctrl+K</kbd>
           </button>
 
-          <span className="px-2 py-1 rounded-md text-[10px] font-semibold" style={{ background: '#e8f5ee', color: '#2D5A3D' }}>{ROLE_LABELS[profile.role]}</span>
-          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold" style={{ background: profile.avatar_color, color: '#333' }}>{getInitials(profile.name)}</div>
-          <button onClick={signOut} className="text-gray-400 hover:text-gray-600" title="Đăng xuất">
+          <span className="hidden sm:inline px-2 py-1 rounded-md text-[10px] font-semibold flex-shrink-0" style={{ background: '#e8f5ee', color: '#2D5A3D' }}>{ROLE_LABELS[profile.role]}</span>
+          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0" style={{ background: profile.avatar_color, color: '#333' }} title={profile.name + ' · ' + ROLE_LABELS[profile.role]}>{getInitials(profile.name)}</div>
+          <button onClick={signOut} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Đăng xuất">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
           </button>
         </div>
       </header>
 
-      <nav className="bg-white border-b border-gray-100 sticky top-14 z-30">
-        <div className="max-w-6xl mx-auto px-4 flex gap-0.5 overflow-x-auto">
+      <nav className="bg-white border-b border-gray-100 sticky top-12 sm:top-14 z-30">
+        <div className="max-w-6xl mx-auto px-2 sm:px-4 flex gap-0.5 overflow-x-auto no-scrollbar">
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${tab === t.id ? 'text-emerald-800' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-2 sm:py-2.5 text-[11px] sm:text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${tab === t.id ? 'text-emerald-800' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
               style={tab === t.id ? { borderBottomColor: '#2D5A3D' } : {}}>
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d={t.icon} /></svg>
               {t.label}
