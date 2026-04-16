@@ -537,10 +537,45 @@ export default function Proposals({ userId, userName, members, department, branc
         </div>
       )}
 
-      <div className="space-y-3">
-        {filteredProposals.map(p => {
-          const sc = STS[p.status]; const isExp = expanded === p.id;
-          return (
+      <div className="space-y-5">
+        {(() => {
+          // Nhóm theo ngày tạo (VN) — dễ quan sát "ngày hôm nay, hôm qua, ..."
+          const byDay = {};
+          for (const p of filteredProposals) {
+            const key = (() => {
+              const d = new Date(p.created_at);
+              const vn = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+              return vn.toISOString().slice(0, 10);
+            })();
+            if (!byDay[key]) byDay[key] = [];
+            byDay[key].push(p);
+          }
+          const todayKey = (() => {
+            const d = new Date();
+            const vn = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+            return vn.toISOString().slice(0, 10);
+          })();
+          const yesterdayKey = (() => {
+            const d = new Date();
+            d.setUTCDate(d.getUTCDate() - 1);
+            const vn = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+            return vn.toISOString().slice(0, 10);
+          })();
+          function dayLabel(k) {
+            if (k === todayKey) return 'Hôm nay';
+            if (k === yesterdayKey) return 'Hôm qua';
+            const dt = new Date(k + 'T12:00:00Z');
+            const w = ['CN','T2','T3','T4','T5','T6','T7'][dt.getUTCDay()];
+            return `${w}, ${dt.toLocaleDateString('vi-VN')}`;
+          }
+          const sortedKeys = Object.keys(byDay).sort((a, b) => b.localeCompare(a));
+          return sortedKeys.map(dayKey => (
+            <div key={'day-' + dayKey}>
+              <p className="text-[11px] font-bold uppercase tracking-wide mb-1.5 text-gray-500">{dayLabel(dayKey)} <span className="text-gray-400 font-semibold">({byDay[dayKey].length})</span></p>
+              <div className="space-y-2">
+                {byDay[dayKey].map(p => {
+                  const sc = STS[p.status]; const isExp = expanded === p.id;
+                  return (
             <div key={p.id} id={'proposal-row-' + p.id} className="card p-4 transition-all">
               <div className="flex items-start gap-3 cursor-pointer" onClick={() => { setExpanded(isExp ? null : p.id); if (!isExp && !comments[p.id]) loadComments(p.id); }}>
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 mt-0.5" style={{ background: p.creator?.avatar_color, color: '#333' }}>{ini(p.creator?.name)}</div>
@@ -624,7 +659,11 @@ export default function Proposals({ userId, userName, members, department, branc
               )}
             </div>
           );
-        })}
+                })}
+              </div>
+            </div>
+          ));
+        })()}
         {filteredProposals.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">Chưa có đề xuất nào trong mục này</div>}
       </div>
     </div>

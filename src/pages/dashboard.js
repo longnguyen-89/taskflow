@@ -7,6 +7,7 @@ import TaskList from '@/components/TaskList';
 import CreateTask from '@/components/CreateTask';
 import Performance from '@/components/Performance';
 import Notifications from '@/components/Notifications';
+import MyTasks from '@/components/MyTasks';
 import Proposals from '@/components/Proposals';
 import AdminPanel from '@/components/AdminPanel';
 import RecurringTasks from '@/components/RecurringTasks';
@@ -25,6 +26,7 @@ export default function Dashboard() {
   const [members, setMembers] = useState([]);
   const [taskGroups, setTaskGroups] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [myAllTasks, setMyAllTasks] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showSearch, setShowSearch] = useState(false);
@@ -32,27 +34,45 @@ export default function Dashboard() {
   const [focusTaskId, setFocusTaskId] = useState(null);
   const [focusProposalId, setFocusProposalId] = useState(null);
 
+  // Helper: focus vào 1 task trong tab Dashboard. Tự switch dept/branch nếu cần.
+  const openTaskById = useCallback(async (taskId) => {
+    if (!taskId) return;
+    const { data: tk } = await supabase.from('tasks').select('id, department, branch, parent_id').eq('id', taskId).maybeSingle();
+    if (tk) {
+      if (tk.department && tk.department !== dept) setDept(tk.department);
+      // Switch branch: nếu user được xem chi nhánh đó, switch; nếu task không có branch, reset về null.
+      if (tk.department === 'nail') {
+        const allowed = (isDirector || isAccountant) ? null : (Array.isArray(profile?.branches) ? profile.branches : []);
+        if (tk.branch) {
+          if (!allowed || allowed.includes(tk.branch)) setBranch(tk.branch);
+        } else {
+          setBranch(null);
+        }
+      }
+      setFocusTaskId(tk.parent_id || tk.id);
+    } else {
+      setFocusTaskId(taskId);
+    }
+    setTab('dashboard');
+  }, [dept, isDirector, isAccountant, profile]);
+
   // Khi click vào 1 thông báo -> chuyển tab & focus vào task/proposal tương ứng.
   const handleOpenNotification = useCallback(async (n) => {
     if (!n) return;
     if (n.task_id) {
-      // Lấy task để biết department/branch rồi chuyển tab Dashboard + focus.
-      const { data: tk } = await supabase.from('tasks').select('id, department, branch, parent_id').eq('id', n.task_id).maybeSingle();
-      if (tk) {
-        if (tk.department && tk.department !== dept) setDept(tk.department);
-        if (tk.department === 'nail' && tk.branch && canViewAll) setBranch(tk.branch);
-        // Nếu là sub-task, focus vào parent.
-        setFocusTaskId(tk.parent_id || tk.id);
-        setTab('dashboard');
-      } else {
-        setFocusTaskId(n.task_id);
-        setTab('dashboard');
-      }
+      await openTaskById(n.task_id);
     } else if (n.proposal_id) {
       const { data: pr } = await supabase.from('proposals').select('id, department, branch').eq('id', n.proposal_id).maybeSingle();
       if (pr) {
         if (pr.department && pr.department !== dept) setDept(pr.department);
-        if (pr.department === 'nail' && pr.branch && canViewAll) setBranch(pr.branch);
+        if (pr.department === 'nail') {
+          const allowed = (isDirector || isAccountant) ? null : (Array.isArray(profile?.branches) ? profile.branches : []);
+          if (pr.branch) {
+            if (!allowed || allowed.includes(pr.branch)) setBranch(pr.branch);
+          } else {
+            setBranch(null);
+          }
+        }
         setFocusProposalId(pr.id);
         setTab('proposals');
       } else {
@@ -60,7 +80,7 @@ export default function Dashboard() {
         setTab('proposals');
       }
     }
-  }, [dept, canViewAll]);
+  }, [dept, isDirector, isAccountant, profile, openTaskById]);
 
   useEffect(() => {
     supabase.from('app_settings').select('value').eq('key', 'appearance').single().then(({ data }) => {
@@ -95,6 +115,7 @@ export default function Dashboard() {
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4', show: true },
+    { id: 'mytasks', label: 'Công việc tôi', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', show: true },
     { id: 'create', label: 'Giao task', icon: 'M12 4v16m8-8H4', show: isAdmin },
     { id: 'recurring', label: 'Lặp lại', icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15', show: isAdmin },
     { id: 'proposals', label: 'Đề xuất', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', show: true },
@@ -154,6 +175,35 @@ export default function Dashboard() {
     const { data: notifs } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50);
     setNotifications(notifs || []);
     setUnreadCount(notifs?.filter(n => !n.read).length || 0);
+
+    // "Công việc tôi" — lấy tất cả task liên quan đến user (cross-dept, cross-branch), không lọc theo tab hiện tại.
+    // Truy vấn riêng qua 3 bảng: assignees, watchers, created_by — rồi hợp lại.
+    const { data: myAssignIds } = await supabase.from('task_assignees').select('task_id').eq('user_id', user.id);
+    const { data: myWatchIds } = await supabase.from('task_watchers').select('task_id').eq('user_id', user.id);
+    const idSet = new Set([
+      ...(myAssignIds || []).map(x => x.task_id),
+      ...(myWatchIds || []).map(x => x.task_id),
+    ]);
+    // Task do user tạo (dù chưa gán cho ai) — lấy riêng.
+    // Gộp một query duy nhất: .or('id.in.(...),created_by.eq.uid') nhưng nếu idSet quá lớn, dùng 2 query rồi merge.
+    let myTasksRaw = [];
+    if (idSet.size > 0) {
+      const { data: byRel } = await supabase.from('tasks').select(`
+        *, creator:profiles!tasks_created_by_fkey(id, name, avatar_color, position),
+        assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(id, name, avatar_color, position)),
+        watchers:task_watchers(user_id, user:profiles!task_watchers_user_id_fkey(id, name, avatar_color))
+      `).in('id', Array.from(idSet));
+      if (byRel) myTasksRaw = byRel;
+    }
+    const { data: byCreator } = await supabase.from('tasks').select(`
+      *, creator:profiles!tasks_created_by_fkey(id, name, avatar_color, position),
+      assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(id, name, avatar_color, position)),
+      watchers:task_watchers(user_id, user:profiles!task_watchers_user_id_fkey(id, name, avatar_color))
+    `).eq('created_by', user.id).order('created_at', { ascending: false });
+    // Merge (dedupe)
+    const seen = new Set(myTasksRaw.map(t => t.id));
+    for (const t of byCreator || []) if (!seen.has(t.id)) { myTasksRaw.push(t); seen.add(t.id); }
+    setMyAllTasks(myTasksRaw);
 
     setLoading(false);
   }, [user, profile, dept, branch, isDirector, isAccountant, canViewAll]);
@@ -321,6 +371,7 @@ export default function Dashboard() {
         {tab === 'create' && isAdmin && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
         {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} profile={profile} isDirector={isDirector} isAccountant={isAccountant} canApprove={canApprove} focusProposalId={focusProposalId} clearFocus={() => setFocusProposalId(null)} />}
         {tab === 'performance' && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isDirector || isAccountant} isDirector={isDirector} />}
+        {tab === 'mytasks' && <MyTasks tasks={myAllTasks} members={members} userId={user.id} onOpenTask={openTaskById} profileName={profile.name} />}
         {tab === 'notifications' && <Notifications notifications={notifications} userId={user.id} onRefresh={fetchData} onOpen={handleOpenNotification} />}
         {tab === 'admin' && isDirector && <AdminPanel members={members} department={dept} onRefresh={fetchData} />}
         {tab === 'recurring' && isAdmin && <RecurringTasks members={members} department={dept} userId={user.id} taskGroups={taskGroups} />}

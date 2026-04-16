@@ -87,15 +87,31 @@ export default async function handler(req, res) {
       ? globalThis.crypto.randomUUID()
       : null;
 
+    // FIX: Lấy branches của từng assignee để gán branch cho task (chỉ dept 'nail').
+    // Trước đây task sinh ra không có branch -> bị filter chi nhánh loại bỏ,
+    // dẫn đến member không thấy task dù đã nhận notification.
+    let assigneeBranchMap = {};
+    if (r.department === 'nail' && r.assignee_ids && r.assignee_ids.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, branches')
+        .in('id', r.assignee_ids);
+      for (const p of profiles || []) {
+        assigneeBranchMap[p.id] = (Array.isArray(p.branches) && p.branches.length > 0) ? p.branches[0] : null;
+      }
+    }
+
     const createdTaskIds = [];
     let insertErr = null;
 
     for (const assigneeId of assigneeList) {
+      const taskBranch = (r.department === 'nail' && assigneeId) ? (assigneeBranchMap[assigneeId] || null) : null;
       const { data: task, error: te } = await supabase.from('tasks').insert({
         title: r.title,
         description: r.description,
         priority: r.priority,
         department: r.department,
+        branch: taskBranch,
         group_id: r.group_id,
         group_key: groupKey,
         deadline: deadlineISO,
