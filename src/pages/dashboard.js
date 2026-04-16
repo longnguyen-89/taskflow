@@ -140,15 +140,23 @@ export default function Dashboard() {
     let filtered = allTasks || [];
 
     // Lọc theo chi nhánh (chỉ áp dụng cho Nail).
+    // LƯU Ý: luôn cho user thấy task họ trực tiếp tham gia (assignee/watcher/creator)
+    // dù task không khớp chi nhánh — tránh trường hợp task lặp lại cũ có branch=null
+    // bị filter loại bỏ dẫn đến người nhận thông báo bấm vào không thấy task.
+    const involvesMe = (t) =>
+      t.assignees?.some(a => a.user_id === user.id) ||
+      t.watchers?.some(w => w.user_id === user.id) ||
+      t.created_by === user.id;
+
     if (dept === 'nail') {
       if (branch) {
-        // Tab cụ thể: chỉ lấy task thuộc chi nhánh đang chọn.
-        filtered = filtered.filter(t => t.branch === branch);
+        // Tab cụ thể: chỉ lấy task thuộc chi nhánh đang chọn HOẶC task user trực tiếp tham gia.
+        filtered = filtered.filter(t => t.branch === branch || involvesMe(t));
       } else if (!canViewAll) {
-        // Admin xem "tất cả": giới hạn trong các chi nhánh được gán.
+        // Admin xem "tất cả": giới hạn trong các chi nhánh được gán HOẶC task user trực tiếp tham gia.
         const allowed = Array.isArray(profile?.branches) ? profile.branches : [];
         if (allowed.length > 0) {
-          filtered = filtered.filter(t => t.branch && allowed.includes(t.branch));
+          filtered = filtered.filter(t => (t.branch && allowed.includes(t.branch)) || involvesMe(t));
         }
       }
     }
