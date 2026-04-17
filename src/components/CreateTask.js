@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
 import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
+import { logActivity, ACTIONS } from '@/lib/activityLog';
 
 function getFileIcon(name) {
   const ext = (name || '').toLowerCase();
@@ -151,6 +152,7 @@ export default function CreateTask({ members, userId, userName, department, bran
       return;
     }
 
+    logActivity({ userId, userName, action: ACTIONS.TASK_CREATED, targetType: 'task', targetTitle: title.trim(), details: { assignee_count: createdCount, priority }, department, branch: department === 'nail' ? (taskBranch || null) : null });
     toast(`Đã tạo ${createdCount} task cho ${createdCount} người!`, 'success');
     setTitle(''); setDesc(''); setPriority('medium'); setDeadline(''); setAssignees([]); setWatchers([]); setGroupId(''); setFiles([]);
     setSubmitting(false); onCreated();

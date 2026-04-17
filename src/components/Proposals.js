@@ -4,6 +4,7 @@ import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
 import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
 import { deleteProposalCascade } from '@/lib/deletions';
+import { logActivity, ACTIONS } from '@/lib/activityLog';
 
 // Render @Name as styled chip in comment content
 function renderMentions(text, mentionables) {
@@ -162,6 +163,12 @@ export default function Proposals({ userId, userName, members, department, branc
   const [watcherIds, setWatcherIds] = useState([]);
   const [files, setFiles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  // Bảng chi tiết mặt hàng (cả Mua hàng + Thanh toán). Không bắt buộc.
+  // Mỗi dòng: { name, unit, quantity, unit_price, note, files: [{name,url,type,size}] }.
+  // Tổng giá = quantity * unit_price (tính runtime). Files: upload Supabase storage, lưu URL.
+  const [items, setItems] = useState([{ name: '', unit: '', quantity: '', unit_price: '', note: '', files: [] }]);
+  // Track index các dòng đang upload file để disable button.
+  const [uploadingItemIdx, setUploadingItemIdx] = useState(null);
   const [expanded, setExpanded] = useState(null);
   const [comments, setComments] = useState({});
   const [newComment, setNewComment] = useState('');
@@ -261,6 +268,52 @@ export default function Proposals({ userId, userName, members, department, branc
   }
   function removeCommentFile(index) { setCommentFiles(prev => prev.filter((_, i) => i !== index)); }
 
+  // ================= ITEMS (bảng chi tiết mặt hàng) =================
+  const EMPTY_ITEM = { name: '', unit: '', quantity: '', unit_price: '', note: '', files: [] };
+  function addItem() { setItems(prev => [...prev, { ...EMPTY_ITEM, files: [] }]); }
+  function removeItem(idx) { setItems(prev => prev.filter((_, i) => i !== idx)); }
+  function updateItem(idx, field, value) {
+    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  }
+  // Parse number từ chuỗi "1.234.567" hoặc "1234567" hoặc "1,5" → number.
+  function parseNum(v) {
+    if (v === null || v === undefined || v === '') return 0;
+    const s = String(v).replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+  function itemTotal(it) { return parseNum(it.quantity) * parseNum(it.unit_price); }
+  function itemsGrandTotal(list) { return (list || []).reduce((s, it) => s + itemTotal(it), 0); }
+
+  // Upload nhiều file cho 1 dòng item. Lưu URL vào item.files.
+  async function handleItemFileUpload(itemIdx, e) {
+    const chosen = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (chosen.length === 0) return;
+    setUploadingItemIdx(itemIdx);
+    const newFiles = [];
+    for (const f of chosen) {
+      const safeName = f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+      const path = `proposals/items/${Date.now()}_${safeName}`;
+      const { error } = await supabase.storage.from('attachments').upload(path, f);
+      if (error) { toast('Lỗi upload ' + f.name + ': ' + error.message, 'error'); continue; }
+      const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(path);
+      newFiles.push({ name: f.name, url: publicUrl, type: f.type, size: f.size });
+    }
+    if (newFiles.length > 0) {
+      setItems(prev => prev.map((it, i) => i === itemIdx
+        ? { ...it, files: [...(it.files || []), ...newFiles] }
+        : it));
+      toast(`Đã đính kèm ${newFiles.length} file cho dòng #${itemIdx + 1}`, 'success');
+    }
+    setUploadingItemIdx(null);
+  }
+  function removeItemFile(itemIdx, fileIdx) {
+    setItems(prev => prev.map((it, i) => i === itemIdx
+      ? { ...it, files: (it.files || []).filter((_, fi) => fi !== fileIdx) }
+      : it));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!title.trim()) return toast('Nhập tiêu đề', 'error');
@@ -272,10 +325,22 @@ export default function Proposals({ userId, userName, members, department, branc
     const tabLabel = MAIN_TABS.find(t => t.id === activeTab)?.label || 'Mua hàng';
     const catName = catId ? (categories.find(c => c.id === catId)?.name || tabLabel) : tabLabel;
     const costRaw = parseVND(costDisplay);
+    // Làm sạch items: chỉ giữ dòng có tên mặt hàng, parse số từ chuỗi format VND.
+    const cleanItems = items
+      .filter(it => it.name && it.name.trim())
+      .map(it => ({
+        name: it.name.trim(),
+        unit: (it.unit || '').trim(),
+        quantity: parseNum(it.quantity),
+        unit_price: parseNum(it.unit_price),
+        note: (it.note || '').trim(),
+        files: Array.isArray(it.files) ? it.files : [],
+      }));
     const { data: p, error } = await supabase.from('proposals').insert({
       title: title.trim(), description: desc.trim(), category_id: catId || null,
       category_name: catName, estimated_cost: costRaw ? parseInt(costRaw) : null,
-      department, branch: department === 'nail' ? (createBranch || null) : null, created_by: userId
+      department, branch: department === 'nail' ? (createBranch || null) : null, created_by: userId,
+      items: cleanItems,
     }).select().single();
     if (error) { toast('Lỗi: ' + error.message, 'error'); setSubmitting(false); return; }
     for (const aid of approverIds) {
@@ -296,8 +361,10 @@ export default function Proposals({ userId, userName, members, department, branc
         await supabase.from('proposal_files').insert({ proposal_id: p.id, file_name: f.name, file_url: publicUrl, file_type: f.type, file_size: f.size, uploaded_by: userId });
       }
     }
+    logActivity({ userId, userName, action: ACTIONS.PROPOSAL_CREATED, targetType: 'proposal', targetId: p.id, targetTitle: title.trim(), details: { category: catName, cost: costRaw ? parseInt(costRaw) : null }, department, branch: department === 'nail' ? (createBranch || null) : null });
     toast('Đã gửi đề xuất!', 'success');
     setTitle(''); setDesc(''); setCostDisplay(''); setApproverIds([]); setWatcherIds([]); setFiles([]); setCatId('');
+    setItems([{ ...EMPTY_ITEM }]);
     setShowForm(false); setSubmitting(false); fetchAll();
   }
 
@@ -327,6 +394,8 @@ export default function Proposals({ userId, userName, members, department, branc
       sendPush(proposal.created_by, `Đề xuất ${statusText}`, `${approverName} ${statusText}: "${proposal.title}"`, { url: '/dashboard', tag: 'approval-' + pid });
       await supabase.from('notifications').insert({ user_id: proposal.created_by, type: action === 'approved' ? 'approved' : 'rejected', title: `Đề xuất ${statusText}`, message: `${approverName} ${statusText}: "${proposal.title}"`, proposal_id: pid });
     }
+    const pObj = proposals.find(pr => pr.id === pid);
+    logActivity({ userId: uid, userName: members.find(m => m.id === uid)?.name, action: action === 'approved' ? ACTIONS.PROPOSAL_APPROVED : ACTIONS.PROPOSAL_REJECTED, targetType: 'proposal', targetId: pid, targetTitle: pObj?.title, department: pObj?.department });
     toast(action === 'approved' ? 'Đã duyệt!' : 'Đã từ chối', 'success'); fetchAll();
   }
 
@@ -474,6 +543,143 @@ export default function Proposals({ userId, userName, members, department, branc
               {costDisplay && <p className="text-[10px] text-emerald-600 mt-0.5">{costDisplay} VNĐ</p>}
             </div>
 
+            {/* =================== CHI TIẾT MẶT HÀNG (items) =================== */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                Chi tiết <span className="text-gray-400 font-normal">(tùy chọn — liệt kê từng mặt hàng / khoản chi)</span>
+              </label>
+
+              {/* Desktop: table layout */}
+              <div className="hidden md:block border border-gray-200 rounded-xl overflow-hidden">
+                <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-2 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                  <div className="text-center">#</div>
+                  <div>Tên mặt hàng</div>
+                  <div>ĐVT</div>
+                  <div className="text-right">Số lượng</div>
+                  <div className="text-right">Đơn giá</div>
+                  <div className="text-right">Tổng giá</div>
+                  <div>Ghi chú</div>
+                  <div></div>
+                </div>
+                {items.map((it, idx) => {
+                  const itFiles = Array.isArray(it.files) ? it.files : [];
+                  return (
+                  <div key={idx} className="border-b border-gray-100 last:border-b-0">
+                    <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-1.5 items-center">
+                      <div className="text-center text-xs text-gray-500 font-semibold">{idx + 1}</div>
+                      <input className="input-field !text-xs !py-1.5" placeholder="VD: Nước rửa tay" value={it.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
+                      <input className="input-field !text-xs !py-1.5" placeholder="chai" value={it.unit} onChange={e => updateItem(idx, 'unit', e.target.value)} />
+                      <input className="input-field !text-xs !py-1.5 text-right" inputMode="decimal" placeholder="0" value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} />
+                      <input className="input-field !text-xs !py-1.5 text-right" inputMode="numeric" placeholder="0" value={it.unit_price} onChange={e => updateItem(idx, 'unit_price', formatVND(e.target.value))} />
+                      <div className="px-2 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs text-right font-semibold truncate" title={itemTotal(it).toLocaleString('de-DE') + 'đ'}>
+                        {itemTotal(it) > 0 ? itemTotal(it).toLocaleString('de-DE') + 'đ' : '—'}
+                      </div>
+                      <input className="input-field !text-xs !py-1.5" placeholder="Ghi chú..." value={it.note} onChange={e => updateItem(idx, 'note', e.target.value)} />
+                      <button type="button" onClick={() => removeItem(idx)} disabled={items.length <= 1}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                        title="Xóa dòng">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                      </button>
+                    </div>
+                    {/* File attachments per item - row phụ nằm dưới row chính */}
+                    <div className="px-2 pb-2 pl-[52px] flex flex-wrap items-center gap-1.5">
+                      {itFiles.map((f, fi) => (
+                        <a key={fi} href={f.url} target="_blank" rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="group inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-[10px] text-blue-700 max-w-[200px]">
+                          <span className="flex-shrink-0">{getFileIcon(f.name)}</span>
+                          <span className="truncate" title={f.name}>{f.name}</span>
+                          <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeItemFile(idx, fi); }}
+                            className="flex-shrink-0 text-red-400 hover:text-red-600 ml-0.5" title="Xóa file">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </a>
+                      ))}
+                      <label className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer text-[10px] text-gray-500 ${uploadingItemIdx === idx ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                        {uploadingItemIdx === idx ? 'Đang tải...' : (itFiles.length > 0 ? 'Thêm file' : 'Đính kèm file')}
+                        <input type="file" multiple className="hidden" onChange={(e) => handleItemFileUpload(idx, e)} />
+                      </label>
+                    </div>
+                  </div>
+                  );
+                })}
+                {/* Tổng cộng hàng cuối */}
+                {items.some(it => it.name && it.name.trim()) && (
+                  <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-2 bg-emerald-50/50 border-t-2 border-emerald-200 text-xs font-bold">
+                    <div></div>
+                    <div className="col-span-4 text-right text-gray-700">Tổng cộng:</div>
+                    <div className="text-right text-emerald-700">{itemsGrandTotal(items).toLocaleString('de-DE')}đ</div>
+                    <div></div>
+                    <div></div>
+                  </div>
+                )}
+              </div>
+
+              {/* Mobile: stack card layout */}
+              <div className="md:hidden space-y-2">
+                {items.map((it, idx) => {
+                  const itFiles = Array.isArray(it.files) ? it.files : [];
+                  return (
+                  <div key={idx} className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/30">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase">Dòng #{idx + 1}</span>
+                      <button type="button" onClick={() => removeItem(idx)} disabled={items.length <= 1}
+                        className="text-red-400 hover:text-red-600 disabled:opacity-20 disabled:cursor-not-allowed" title="Xóa dòng">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      <input className="input-field !text-xs !py-1.5" placeholder="Tên mặt hàng *" value={it.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <input className="input-field !text-xs !py-1.5" placeholder="ĐVT (chai, cái...)" value={it.unit} onChange={e => updateItem(idx, 'unit', e.target.value)} />
+                        <input className="input-field !text-xs !py-1.5 text-right" inputMode="decimal" placeholder="Số lượng" value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} />
+                      </div>
+                      <input className="input-field !text-xs !py-1.5 text-right" inputMode="numeric" placeholder="Đơn giá" value={it.unit_price} onChange={e => updateItem(idx, 'unit_price', formatVND(e.target.value))} />
+                      <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-50 text-xs">
+                        <span className="text-gray-500">Tổng giá:</span>
+                        <span className="font-semibold text-emerald-700">{itemTotal(it) > 0 ? itemTotal(it).toLocaleString('de-DE') + 'đ' : '—'}</span>
+                      </div>
+                      <input className="input-field !text-xs !py-1.5" placeholder="Ghi chú..." value={it.note} onChange={e => updateItem(idx, 'note', e.target.value)} />
+                      {/* File attachments per item - mobile */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        {itFiles.map((f, fi) => (
+                          <a key={fi} href={f.url} target="_blank" rel="noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-[10px] text-blue-700 max-w-[180px]">
+                            <span className="flex-shrink-0">{getFileIcon(f.name)}</span>
+                            <span className="truncate" title={f.name}>{f.name}</span>
+                            <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeItemFile(idx, fi); }}
+                              className="flex-shrink-0 text-red-400 hover:text-red-600 ml-0.5">
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          </a>
+                        ))}
+                        <label className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer text-[10px] text-gray-500 ${uploadingItemIdx === idx ? 'opacity-50 pointer-events-none' : ''}`}>
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                          {uploadingItemIdx === idx ? 'Đang tải...' : (itFiles.length > 0 ? 'Thêm file' : 'Đính kèm file')}
+                          <input type="file" multiple className="hidden" onChange={(e) => handleItemFileUpload(idx, e)} />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  );
+                })}
+                {items.some(it => it.name && it.name.trim()) && (
+                  <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 border-2 border-emerald-200">
+                    <span className="text-xs font-bold text-gray-700">Tổng cộng:</span>
+                    <span className="text-sm font-bold text-emerald-700">{itemsGrandTotal(items).toLocaleString('de-DE')}đ</span>
+                  </div>
+                )}
+              </div>
+
+              <button type="button" onClick={addItem}
+                className="mt-2 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors"
+                style={{ color: '#2D5A3D' }}>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                Thêm dòng mới
+              </button>
+            </div>
+
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1.5">Người duyệt * <span className="text-gray-400">(TGĐ / Kế toán)</span></label>
               <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -604,6 +810,95 @@ export default function Proposals({ userId, userName, members, department, branc
                   )}
                   {p.description && <p className="text-xs text-gray-600 mb-2 leading-relaxed">{p.description}</p>}
                   {p.estimated_cost && <p className="text-xs mb-2">Chi phí: <strong>{fmtCost(p.estimated_cost)}</strong></p>}
+
+                  {/* Chi tiết mặt hàng (readonly) — chỉ hiện nếu có items */}
+                  {Array.isArray(p.items) && p.items.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Chi tiết ({p.items.length} mặt hàng)</p>
+                      {/* Desktop table */}
+                      <div className="hidden md:block border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="grid grid-cols-[32px_minmax(120px,2fr)_60px_60px_110px_110px_minmax(100px,1.5fr)] gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200 text-[9px] font-semibold text-gray-500 uppercase">
+                          <div className="text-center">#</div>
+                          <div>Tên</div>
+                          <div>ĐVT</div>
+                          <div className="text-right">SL</div>
+                          <div className="text-right">Đơn giá</div>
+                          <div className="text-right">Tổng</div>
+                          <div>Ghi chú</div>
+                        </div>
+                        {p.items.map((it, idx) => {
+                          const itFiles = Array.isArray(it.files) ? it.files : [];
+                          return (
+                          <div key={idx} className="border-b border-gray-100 last:border-b-0">
+                            <div className="grid grid-cols-[32px_minmax(120px,2fr)_60px_60px_110px_110px_minmax(100px,1.5fr)] gap-1 px-2 py-1.5 text-[11px] items-center">
+                              <div className="text-center text-gray-400">{idx + 1}</div>
+                              <div className="font-medium text-gray-700 truncate" title={it.name}>{it.name}</div>
+                              <div className="text-gray-500">{it.unit || '—'}</div>
+                              <div className="text-right text-gray-600">{Number(it.quantity || 0).toLocaleString('de-DE')}</div>
+                              <div className="text-right text-gray-600">{Number(it.unit_price || 0).toLocaleString('de-DE')}đ</div>
+                              <div className="text-right font-semibold text-emerald-700">{itemTotal(it).toLocaleString('de-DE')}đ</div>
+                              <div className="text-gray-500 truncate" title={it.note}>{it.note || '—'}</div>
+                            </div>
+                            {itFiles.length > 0 && (
+                              <div className="px-2 pb-1.5 pl-[44px] flex flex-wrap items-center gap-1">
+                                {itFiles.map((f, fi) => (
+                                  <a key={fi} href={f.url} target="_blank" rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-[10px] text-blue-700 max-w-[200px]">
+                                    <span className="flex-shrink-0">{getFileIcon(f.name)}</span>
+                                    <span className="truncate" title={f.name}>{f.name}</span>
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          );
+                        })}
+                        <div className="grid grid-cols-[32px_minmax(120px,2fr)_60px_60px_110px_110px_minmax(100px,1.5fr)] gap-1 px-2 py-1.5 bg-emerald-50/60 border-t-2 border-emerald-200 text-xs font-bold">
+                          <div></div>
+                          <div className="col-span-4 text-right text-gray-700">Tổng cộng:</div>
+                          <div className="text-right text-emerald-700">{itemsGrandTotal(p.items).toLocaleString('de-DE')}đ</div>
+                          <div></div>
+                        </div>
+                      </div>
+                      {/* Mobile stack */}
+                      <div className="md:hidden space-y-1.5">
+                        {p.items.map((it, idx) => {
+                          const itFiles = Array.isArray(it.files) ? it.files : [];
+                          return (
+                          <div key={idx} className="border border-gray-200 rounded-lg p-2 bg-white text-[11px]">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="text-[9px] font-bold text-gray-400">#{idx + 1}</span>
+                              <span className="font-semibold text-gray-800 flex-1 truncate">{it.name}</span>
+                              <span className="font-bold text-emerald-700">{itemTotal(it).toLocaleString('de-DE')}đ</span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-gray-500">
+                              <span>SL: <strong className="text-gray-700">{Number(it.quantity || 0).toLocaleString('de-DE')}</strong>{it.unit && ` ${it.unit}`}</span>
+                              <span>Đơn giá: <strong className="text-gray-700">{Number(it.unit_price || 0).toLocaleString('de-DE')}đ</strong></span>
+                            </div>
+                            {it.note && <p className="text-[10px] text-gray-500 mt-0.5 italic">"{it.note}"</p>}
+                            {itFiles.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1 mt-1 pt-1 border-t border-gray-100">
+                                {itFiles.map((f, fi) => (
+                                  <a key={fi} href={f.url} target="_blank" rel="noreferrer"
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-[10px] text-blue-700 max-w-[160px]">
+                                    <span className="flex-shrink-0">{getFileIcon(f.name)}</span>
+                                    <span className="truncate" title={f.name}>{f.name}</span>
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          );
+                        })}
+                        <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-50 border-2 border-emerald-200">
+                          <span className="text-[11px] font-bold text-gray-700">Tổng cộng:</span>
+                          <span className="text-xs font-bold text-emerald-700">{itemsGrandTotal(p.items).toLocaleString('de-DE')}đ</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {p.files?.length > 0 && (<div className="mb-3"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">File đính kèm ({p.files.length})</p><div className="space-y-1">{p.files.map(f => <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"><span className="text-sm flex-shrink-0">{getFileIcon(f.file_name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.file_name}</span><span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.file_size)}</span><svg className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></a>)}</div></div>)}
                   <div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Người duyệt</p>
                     {p.approvers?.map(a => (

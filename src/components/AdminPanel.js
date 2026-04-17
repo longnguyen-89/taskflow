@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { useAuth } from '@/contexts/AuthContext';
 import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
+import { ACTION_LABELS, ACTION_ICONS } from '@/lib/activityLog';
 
 const POSITIONS = ['Quản lý', 'Kỹ thuật viên', 'Lễ tân', 'Kế toán', 'Buồng phòng', 'Bảo vệ'];
 const ROLES = [
@@ -14,16 +15,19 @@ const ROLES = [
 const COLORS = ['#E6F1FB', '#E1F5EE', '#FAEEDA', '#EEEDFE', '#FAECE7', '#FBEAF0', '#EAF3DE', '#F1EFE8'];
 
 const MENU = [
-  { id: 'users', label: 'Tài khoản & Phân quyền', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
+  { id: 'users', label: 'Tài khoản', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
+  { id: 'branches', label: 'Chi nhánh', icon: 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z' },
+  { id: 'permissions', label: 'Phân quyền', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
   { id: 'groups', label: 'Nhóm công việc', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
   { id: 'categories', label: 'Loại đề xuất', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z' },
+  { id: 'activity', label: 'Lịch sử', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
   { id: 'reports', label: 'Báo cáo', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
   { id: 'appearance', label: 'Giao diện', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01' },
 ];
 
-export default function AdminPanel({ members, department, onRefresh }) {
+export default function AdminPanel({ members, department, onRefresh, dynamicBranches, onBranchesChanged }) {
   const [section, setSection] = useState('users');
-  const { createUser, user: currentAuthUser, isDirector } = useAuth();
+  const { createUser, user: currentAuthUser, isDirector, resetPassword } = useAuth();
 
   return (
     <div className="animate-fade-in">
@@ -33,25 +37,41 @@ export default function AdminPanel({ members, department, onRefresh }) {
       <div className="flex gap-2 mb-5 flex-wrap">
         {MENU.map(m => (
           <button key={m.id} onClick={() => setSection(m.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium border transition-all ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-medium border transition-all ${
               section === m.id ? 'bg-white shadow-sm border-gray-200 text-gray-900' : 'border-transparent text-gray-500 hover:bg-white/50'
             }`}>
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d={m.icon} /></svg>
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d={m.icon} /></svg>
             {m.label}
           </button>
         ))}
       </div>
 
-      {section === 'users' && <UsersSection members={members} department={department} createUser={createUser} onRefresh={onRefresh} isDirector={isDirector} currentUserId={currentAuthUser?.id} />}
+      {section === 'users' && <UsersSection members={members} department={department} createUser={createUser} onRefresh={onRefresh} isDirector={isDirector} currentUserId={currentAuthUser?.id} resetPassword={resetPassword} />}
+      {section === 'branches' && <BranchesSection onBranchesChanged={onBranchesChanged} />}
+      {section === 'permissions' && <PermissionsSection />}
       {section === 'groups' && <GroupsSection department={department} onRefresh={onRefresh} />}
       {section === 'categories' && <CategoriesSection />}
+      {section === 'activity' && <ActivityLogSection department={department} />}
       {section === 'reports' && <ReportsSection department={department} />}
       {section === 'appearance' && <AppearanceSection />}
     </div>
   );
 }
 
-function UsersSection({ members, department, createUser, onRefresh, isDirector, currentUserId }) {
+function UsersSection({ members, department, createUser, onRefresh, isDirector, currentUserId, resetPassword }) {
+  const [resetPwUserId, setResetPwUserId] = useState(null);
+  const [resetPwValue, setResetPwValue] = useState('');
+  const [resetPwLoading, setResetPwLoading] = useState(false);
+
+  async function handleResetPw() {
+    if (!resetPwValue || resetPwValue.length < 6) { toast('Mật khẩu mới tối thiểu 6 ký tự', 'error'); return; }
+    setResetPwLoading(true);
+    const { error } = await resetPassword(resetPwUserId, resetPwValue);
+    setResetPwLoading(false);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    toast('Đã reset mật khẩu!', 'success');
+    setResetPwUserId(null); setResetPwValue('');
+  }
 
   async function handleDeleteUser(m) {
     if (!isDirector) return;
@@ -234,6 +254,11 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
               </button>
               {isDirector && m.id !== currentUserId && (
+                <button onClick={() => { setResetPwUserId(m.id); setResetPwValue(''); }} className="p-1 rounded hover:bg-amber-50 text-amber-400 hover:text-amber-600" title="Reset mật khẩu">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                </button>
+              )}
+              {isDirector && m.id !== currentUserId && (
                 <button onClick={() => handleDeleteUser(m)} className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600" title="Xoá vĩnh viễn (chỉ TGĐ)">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
                 </button>
@@ -242,6 +267,21 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
           );
         })}
       </div>
+
+      {/* Reset password modal */}
+      {resetPwUserId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setResetPwUserId(null)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold mb-1" style={{ color: '#2D5A3D' }}>Reset mật khẩu</h3>
+            <p className="text-[11px] text-gray-500 mb-3">Cho: {members.find(m => m.id === resetPwUserId)?.name || '—'}</p>
+            <input type="text" className="input-field !text-sm mb-3" placeholder="Mật khẩu mới (tối thiểu 6 ký tự)" value={resetPwValue} onChange={e => setResetPwValue(e.target.value)} />
+            <div className="flex gap-2">
+              <button onClick={handleResetPw} disabled={resetPwLoading} className="flex-1 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>{resetPwLoading ? 'Đang xử lý...' : 'Reset'}</button>
+              <button onClick={() => setResetPwUserId(null)} className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100">Hủy</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -251,19 +291,19 @@ function GroupsSection({ department, onRefresh }) {
   const [newName, setNewName] = useState('');
   const { user } = useAuth();
 
-  useEffect(() => { fetch(); }, [department]);
-  async function fetch() {
+  useEffect(() => { fetchGroups(); }, [department]);
+  async function fetchGroups() {
     const { data } = await supabase.from('task_groups').select('*').eq('department', department).order('name');
     setGroups(data || []);
   }
   async function addGroup() {
     if (!newName.trim()) return;
     await supabase.from('task_groups').insert({ name: newName.trim(), department, created_by: user.id });
-    setNewName(''); toast('Đã tạo nhóm!', 'success'); fetch(); onRefresh();
+    setNewName(''); toast('Đã tạo nhóm!', 'success'); fetchGroups(); onRefresh();
   }
   async function deleteGroup(id) {
     await supabase.from('task_groups').delete().eq('id', id);
-    toast('Đã xóa!', 'success'); fetch(); onRefresh();
+    toast('Đã xóa!', 'success'); fetchGroups(); onRefresh();
   }
 
   return (
@@ -290,19 +330,19 @@ function CategoriesSection() {
   const [newName, setNewName] = useState('');
   const { user } = useAuth();
 
-  useEffect(() => { fetch(); }, []);
-  async function fetch() {
+  useEffect(() => { fetchCats(); }, []);
+  async function fetchCats() {
     const { data } = await supabase.from('proposal_categories').select('*').order('name');
     setCats(data || []);
   }
   async function addCat() {
     if (!newName.trim()) return;
     await supabase.from('proposal_categories').insert({ name: newName.trim(), created_by: user.id });
-    setNewName(''); toast('Đã thêm!', 'success'); fetch();
+    setNewName(''); toast('Đã thêm!', 'success'); fetchCats();
   }
   async function deleteCat(id) {
     await supabase.from('proposal_categories').delete().eq('id', id);
-    toast('Đã xóa!', 'success'); fetch();
+    toast('Đã xóa!', 'success'); fetchCats();
   }
 
   return (
@@ -323,132 +363,717 @@ function CategoriesSection() {
   );
 }
 
+// ═══════════ ACTIVITY LOG SECTION ═══════════
+function ActivityLogSection({ department }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filterAction, setFilterAction] = useState('all');
+  const [limit, setLimit] = useState(50);
+
+  useEffect(() => { fetchLogs(); }, [department, filterAction]);
+
+  async function fetchLogs() {
+    setLoading(true);
+    let q = supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(limit);
+    if (department) q = q.eq('department', department);
+    if (filterAction !== 'all') q = q.eq('action', filterAction);
+    const { data } = await q;
+    setLogs(data || []);
+    setLoading(false);
+  }
+
+  const fmtDT = d => { if (!d) return ''; const dt = new Date(d); return dt.toLocaleDateString('vi-VN') + ' ' + dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); };
+  const actionList = Object.entries(ACTION_LABELS);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-sm">Lịch sử hoạt động</h3>
+      </div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        <button onClick={() => setFilterAction('all')} className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${filterAction === 'all' ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`} style={filterAction === 'all' ? { background: '#2D5A3D' } : {}}>Tất cả</button>
+        {actionList.map(([k, l]) => (
+          <button key={k} onClick={() => setFilterAction(k)} className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${filterAction === k ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`} style={filterAction === k ? { background: '#2D5A3D' } : {}}>
+            {ACTION_ICONS[k] || ''} {l}
+          </button>
+        ))}
+      </div>
+      {loading ? <div className="card p-8 text-center text-sm text-gray-400">Đang tải...</div> : logs.length === 0 ? <div className="card p-8 text-center text-sm text-gray-400">Chưa có hoạt động nào</div> : (
+        <div className="space-y-1.5">
+          {logs.map(log => (
+            <div key={log.id} className="card p-3 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm flex-shrink-0">{ACTION_ICONS[log.action] || '📌'}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-gray-800">{log.user_name || 'Hệ thống'}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">{ACTION_LABELS[log.action] || log.action}</span>
+                </div>
+                {log.target_title && <p className="text-xs text-gray-600 mt-0.5 truncate">"{log.target_title}"</p>}
+                {log.details && typeof log.details === 'object' && log.details.old_status && (
+                  <p className="text-[10px] text-gray-500 mt-0.5">{log.details.old_status} → {log.details.new_status}</p>
+                )}
+                <p className="text-[10px] text-gray-400 mt-0.5">{fmtDT(log.created_at)}</p>
+              </div>
+            </div>
+          ))}
+          {logs.length >= limit && (
+            <button onClick={() => { setLimit(l => l + 50); setTimeout(fetchLogs, 0); }}
+              className="w-full py-2 text-xs font-semibold text-gray-500 hover:text-gray-700 bg-gray-50 rounded-xl">
+              Tải thêm...
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════ BRANCHES SECTION ═══════════
+function BranchesSection({ onBranchesChanged }) {
+  const [branches, setBranches] = useState([]);
+  const [newId, setNewId] = useState('');
+  const [newLabel, setNewLabel] = useState('');
+  const [newDept, setNewDept] = useState('nail');
+  const [editId, setEditId] = useState(null);
+  const [editLabel, setEditLabel] = useState('');
+
+  useEffect(() => { fetchBranches(); }, []);
+  async function fetchBranches() {
+    const { data } = await supabase.from('branches').select('*').order('sort_order');
+    setBranches(data || []);
+  }
+
+  async function addBranch() {
+    const slug = newId.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (!slug || !newLabel.trim()) return toast('Nhập ID và tên chi nhánh', 'error');
+    if (branches.some(b => b.id === slug)) return toast('ID đã tồn tại', 'error');
+    const maxSort = branches.length > 0 ? Math.max(...branches.map(b => b.sort_order || 0)) + 1 : 1;
+    const { error } = await supabase.from('branches').insert({ id: slug, label: newLabel.trim(), department: newDept, sort_order: maxSort });
+    if (error) return toast('Lỗi: ' + error.message, 'error');
+    toast('Đã thêm chi nhánh!', 'success');
+    setNewId(''); setNewLabel(''); fetchBranches(); if (onBranchesChanged) onBranchesChanged();
+  }
+
+  async function saveEdit(id) {
+    if (!editLabel.trim()) return;
+    await supabase.from('branches').update({ label: editLabel.trim() }).eq('id', id);
+    toast('Đã cập nhật!', 'success'); setEditId(null); fetchBranches(); if (onBranchesChanged) onBranchesChanged();
+  }
+
+  async function toggleActive(b) {
+    await supabase.from('branches').update({ active: !b.active }).eq('id', b.id);
+    fetchBranches(); if (onBranchesChanged) onBranchesChanged();
+  }
+
+  async function deleteBranch(b) {
+    if (!window.confirm(`Xóa chi nhánh "${b.label}"? Chỉ nên xóa nếu chưa có task/user nào thuộc chi nhánh này.`)) return;
+    const { error } = await supabase.from('branches').delete().eq('id', b.id);
+    if (error) return toast('Lỗi: ' + error.message, 'error');
+    toast('Đã xóa!', 'success'); fetchBranches(); if (onBranchesChanged) onBranchesChanged();
+  }
+
+  return (
+    <div>
+      <h3 className="font-semibold text-sm mb-4">Quản lý chi nhánh</h3>
+      <div className="card p-4 mb-4">
+        <p className="text-xs font-medium text-gray-600 mb-2">Thêm chi nhánh mới</p>
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          <input className="input-field !text-xs" placeholder="ID (vd: phu_nhuan)" value={newId} onChange={e => setNewId(e.target.value)} />
+          <input className="input-field !text-xs" placeholder="Tên hiển thị (vd: Phú Nhuận)" value={newLabel} onChange={e => setNewLabel(e.target.value)} />
+          <select className="input-field !text-xs" value={newDept} onChange={e => setNewDept(e.target.value)}>
+            <option value="nail">Nail</option><option value="hotel">Hotel</option>
+          </select>
+        </div>
+        <button onClick={addBranch} className="px-4 py-2 rounded-xl text-xs font-semibold text-white" style={{ background: '#2D5A3D' }}>+ Thêm</button>
+      </div>
+      <div className="space-y-2">
+        {branches.map(b => (
+          <div key={b.id} className={`card p-3 flex items-center gap-3 ${!b.active ? 'opacity-50' : ''}`}>
+            <span className="text-[10px] font-mono text-gray-400 w-24 truncate">{b.id}</span>
+            {editId === b.id ? (
+              <input className="input-field !text-xs !py-1 flex-1" value={editLabel} onChange={e => setEditLabel(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveEdit(b.id)} autoFocus />
+            ) : (
+              <span className="text-xs font-medium flex-1">{b.label}</span>
+            )}
+            <span className="text-[10px] text-gray-400">{b.department}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${b.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{b.active ? 'Hoạt động' : 'Tạm dừng'}</span>
+            {editId === b.id ? (
+              <button onClick={() => saveEdit(b.id)} className="text-xs text-emerald-600 font-semibold">Lưu</button>
+            ) : (
+              <button onClick={() => { setEditId(b.id); setEditLabel(b.label); }} className="text-xs text-blue-600">Sửa</button>
+            )}
+            <button onClick={() => toggleActive(b)} className="text-xs text-amber-600">{b.active ? 'Dừng' : 'Bật'}</button>
+            <button onClick={() => deleteBranch(b)} className="text-xs text-red-600">Xóa</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════ PERMISSIONS SECTION ═══════════
+function PermissionsSection() {
+  const DEFAULT_PERMS = {
+    member_create_task: false,
+    admin_delete_tasks: false,
+    admin_delete_proposals: false,
+    admin_approve_proposals: false,
+    admin_manage_users: false,
+    member_view_reports: true,
+  };
+  const PERM_LIST = [
+    { key: 'member_create_task', label: 'Nhân viên được tạo task', desc: 'Cho phép Member tạo task mới (không chỉ Admin/TGĐ). Task của Member sẽ cần duyệt.' },
+    { key: 'admin_delete_tasks', label: 'Quản lý được xóa task', desc: 'Cho phép Admin xóa task (hiện chỉ TGĐ).' },
+    { key: 'admin_delete_proposals', label: 'Quản lý được xóa đề xuất', desc: 'Cho phép Admin xóa đề xuất (hiện chỉ TGĐ).' },
+    { key: 'admin_approve_proposals', label: 'Quản lý được duyệt đề xuất', desc: 'Cho phép Admin phê duyệt/từ chối đề xuất (hiện chỉ TGĐ/Kế toán).' },
+    { key: 'admin_manage_users', label: 'Quản lý được quản trị user', desc: 'Cho phép Admin tạo/sửa tài khoản nhân viên (hiện chỉ TGĐ).' },
+    { key: 'member_view_reports', label: 'Nhân viên xem báo cáo', desc: 'Cho phép Member/nhân viên thấy tab Đánh giá. Tắt = chỉ Admin trở lên thấy.' },
+  ];
+
+  const [perms, setPerms] = useState(DEFAULT_PERMS);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'permissions').maybeSingle().then(({ data }) => {
+      if (data) {
+        const v = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        setPerms(prev => ({ ...prev, ...v }));
+      }
+      setLoaded(true);
+    });
+  }, []);
+
+  async function savePerms() {
+    setSaving(true);
+    await supabase.from('app_settings').upsert({ key: 'permissions', value: perms }, { onConflict: 'key' });
+    toast('Đã lưu phân quyền! Thay đổi có hiệu lực khi user tải lại trang.', 'success');
+    setSaving(false);
+  }
+
+  if (!loaded) return <div className="card p-8 text-center text-sm text-gray-400">Đang tải...</div>;
+
+  return (
+    <div>
+      <h3 className="font-semibold text-sm mb-1">Cấu hình phân quyền</h3>
+      <p className="text-[11px] text-gray-500 mb-4">Bật/tắt các quyền mở rộng. Thay đổi áp dụng cho tất cả user thuộc vai trò tương ứng khi họ tải lại trang.</p>
+      <div className="space-y-3">
+        {PERM_LIST.map(p => (
+          <div key={p.key} className="card p-4 flex items-start gap-3">
+            <div className="relative w-10 h-5 rounded-full cursor-pointer transition-colors mt-0.5 flex-shrink-0"
+              style={{ background: perms[p.key] ? '#2D5A3D' : '#d1d5db' }}
+              onClick={() => setPerms(prev => ({ ...prev, [p.key]: !prev[p.key] }))}>
+              <div className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
+                style={{ left: perms[p.key] ? '22px' : '2px' }} />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-gray-800">{p.label}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{p.desc}</p>
+            </div>
+            <span className={`text-[10px] px-2 py-0.5 rounded font-semibold flex-shrink-0 ${perms[p.key] ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              {perms[p.key] ? 'BẬT' : 'TẮT'}
+            </span>
+          </div>
+        ))}
+      </div>
+      <button onClick={savePerms} disabled={saving}
+        className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+        style={{ background: '#2D5A3D' }}>
+        {saving ? 'Đang lưu...' : 'Lưu phân quyền'}
+      </button>
+    </div>
+  );
+}
+
 function ReportsSection({ department }) {
   const [proposals, setProposals] = useState([]);
+  const [prevProposals, setPrevProposals] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [prevTasks, setPrevTasks] = useState([]);
+  const [allMembers, setAllMembers] = useState([]);
   const [categories, setCategories] = useState([]);
   const [period, setPeriod] = useState('month');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchReport(); }, [department, period, dateFrom, dateTo]);
 
-  async function fetchReport() {
+  // ─── Period helpers ───
+  function getPeriodRange() {
     const now = new Date();
     let start;
-    if (dateFrom && dateTo) { start = new Date(dateFrom); }
-    else if (period === 'week') { start = new Date(now); start.setDate(now.getDate() - 7); }
+    if (dateFrom && dateTo) { start = new Date(dateFrom); return { start, end: new Date(dateTo + 'T23:59:59') }; }
+    if (period === 'week') { start = new Date(now); start.setDate(now.getDate() - 7); }
     else if (period === 'month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
     else if (period === 'quarter') { start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1); }
     else { start = new Date(now.getFullYear(), 0, 1); }
+    return { start, end: now };
+  }
+  function getPrevRange() {
+    const { start, end } = getPeriodRange();
+    const dur = end - start;
+    const prevEnd = new Date(start.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - dur);
+    return { start: prevStart, end: prevEnd };
+  }
+  const periodLabel = { week: 'tuần', month: 'tháng', quarter: 'quý', year: 'năm' };
 
-    let pq = supabase.from('proposals').select('*').eq('department', department).gte('created_at', start.toISOString());
-    if (dateTo) pq = pq.lte('created_at', new Date(dateTo + 'T23:59:59').toISOString());
-    const { data: p } = await pq;
-    setProposals(p || []);
-
-    let tq = supabase.from('tasks').select('*').eq('department', department).gte('created_at', start.toISOString());
-    if (dateTo) tq = tq.lte('created_at', new Date(dateTo + 'T23:59:59').toISOString());
-    const { data: t } = await tq;
-    setTasks(t || []);
-
-    const { data: cats } = await supabase.from('proposal_categories').select('*').order('name');
-    setCategories(cats || []);
+  // ─── Fetch ───
+  async function fetchReport() {
+    setLoading(true);
+    const { start, end } = getPeriodRange();
+    const prev = getPrevRange();
+    const endISO = end.toISOString();
+    const [pR, tR, ppR, ptR, mR, cR] = await Promise.all([
+      supabase.from('proposals').select('*').eq('department', department).gte('created_at', start.toISOString()).lte('created_at', endISO),
+      supabase.from('tasks').select('*, assignees:task_assignees(user_id)').eq('department', department).is('parent_id', null).gte('created_at', start.toISOString()).lte('created_at', endISO),
+      supabase.from('proposals').select('*').eq('department', department).gte('created_at', prev.start.toISOString()).lte('created_at', prev.end.toISOString()),
+      supabase.from('tasks').select('id, status, deadline, completed_at').eq('department', department).is('parent_id', null).gte('created_at', prev.start.toISOString()).lte('created_at', prev.end.toISOString()),
+      supabase.from('profiles').select('id, name, avatar_color, position, department, branches').order('name'),
+      supabase.from('proposal_categories').select('*').order('name'),
+    ]);
+    setProposals(pR.data || []); setTasks(tR.data || []);
+    setPrevProposals(ppR.data || []); setPrevTasks(ptR.data || []);
+    setAllMembers(mR.data || []); setCategories(cR.data || []);
+    setLoading(false);
   }
 
+  // ─── Current period metrics ───
+  const now = new Date();
+  const fmtMoney = v => new Intl.NumberFormat('vi-VN').format(v) + 'đ';
+  const ini = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+
+  const totalTasks = tasks.length;
+  const taskDone = tasks.filter(t => t.status === 'done').length;
+  const taskDoing = tasks.filter(t => t.status === 'doing').length;
+  const taskWaiting = tasks.filter(t => t.status === 'waiting').length;
+  const taskOverdue = tasks.filter(t => t.status !== 'done' && t.deadline && new Date(t.deadline) < now).length;
+  const taskRate = totalTasks > 0 ? Math.round((taskDone / totalTasks) * 100) : 0;
+
+  // On-time rate: done + (completed before deadline OR no deadline)
+  const doneOnTime = tasks.filter(t => t.status === 'done' && (!t.deadline || !t.completed_at || new Date(t.completed_at) <= new Date(t.deadline))).length;
+  const onTimeRate = taskDone > 0 ? Math.round((doneOnTime / taskDone) * 100) : 0;
+
+  // Avg completion time (days)
+  const doneTasks = tasks.filter(t => t.status === 'done' && t.completed_at);
+  const avgDays = doneTasks.length > 0 ? (doneTasks.reduce((s, t) => s + (new Date(t.completed_at) - new Date(t.created_at)) / 86400000, 0) / doneTasks.length).toFixed(1) : '—';
+
+  const totalProposals = proposals.length;
+  const totalApproved = proposals.filter(p => p.status === 'approved').length;
+  const totalPending = proposals.filter(p => p.status === 'pending' || p.status === 'partial').length;
+  const totalRejected = proposals.filter(p => p.status === 'rejected').length;
+  const totalCost = proposals.filter(p => p.status === 'approved').reduce((s, p) => s + (Number(p.estimated_cost) || 0), 0);
+  const approvalRate = totalProposals > 0 ? Math.round((totalApproved / totalProposals) * 100) : 0;
+
+  // ─── Previous period metrics (for trend) ───
+  const prevTaskTotal = prevTasks.length;
+  const prevTaskDone = prevTasks.filter(t => t.status === 'done').length;
+  const prevTaskRate = prevTaskTotal > 0 ? Math.round((prevTaskDone / prevTaskTotal) * 100) : 0;
+  const prevTaskOverdue = prevTasks.filter(t => t.status !== 'done' && t.deadline && new Date(t.deadline) < now).length;
+  const prevPropTotal = prevProposals.length;
+  const prevPropApproved = prevProposals.filter(p => p.status === 'approved').length;
+  const prevCost = prevProposals.filter(p => p.status === 'approved').reduce((s, p) => s + (Number(p.estimated_cost) || 0), 0);
+
+  // Trend helper: returns { delta, pct, direction }
+  function trend(cur, prev) {
+    const d = cur - prev;
+    const pct = prev > 0 ? Math.round(Math.abs(d) / prev * 100) : (cur > 0 ? 100 : 0);
+    return { delta: d, pct, dir: d > 0 ? 'up' : d < 0 ? 'down' : 'flat' };
+  }
+
+  // ─── Health Score (0-100) ───
+  // Weights: completion 35%, on-time 25%, low-overdue 20%, approval-rate 20%
+  const healthScore = Math.round(
+    taskRate * 0.35 +
+    onTimeRate * 0.25 +
+    (totalTasks > 0 ? Math.max(0, 100 - (taskOverdue / totalTasks) * 200) : 100) * 0.20 +
+    approvalRate * 0.20
+  );
+  const healthColor = healthScore >= 75 ? '#16a34a' : healthScore >= 50 ? '#d97706' : '#dc2626';
+  const healthLabel = healthScore >= 75 ? 'Tốt' : healthScore >= 50 ? 'Trung bình' : 'Cần cải thiện';
+
+  // ─── Bottleneck: overdue breakdown ───
+  const overdueTasks = tasks.filter(t => t.status !== 'done' && t.deadline && new Date(t.deadline) < now);
+  const od1to3 = overdueTasks.filter(t => { const d = (now - new Date(t.deadline)) / 86400000; return d >= 0 && d < 3; }).length;
+  const od3to7 = overdueTasks.filter(t => { const d = (now - new Date(t.deadline)) / 86400000; return d >= 3 && d < 7; }).length;
+  const od7plus = overdueTasks.filter(t => (now - new Date(t.deadline)) / 86400000 >= 7).length;
+
+  // ─── Employee efficiency (only dept members, exclude director) ───
+  const deptMembers = allMembers.filter(m => m.department === department && m.id);
+  const empStats = deptMembers.map(m => {
+    const mt = tasks.filter(t => (t.assignees || []).some(a => a.user_id === m.id));
+    const done = mt.filter(t => t.status === 'done').length;
+    const overdue = mt.filter(t => t.status !== 'done' && t.deadline && new Date(t.deadline) < now).length;
+    const rate = mt.length > 0 ? Math.round((done / mt.length) * 100) : -1; // -1 = no tasks
+    return { ...m, total: mt.length, done, overdue, rate };
+  }).filter(e => e.total > 0).sort((a, b) => b.rate - a.rate);
+
+  // Top/bottom performers
+  const topPerformers = empStats.filter(e => e.rate >= 0).slice(0, 3);
+  const needAttention = empStats.filter(e => e.overdue > 0).sort((a, b) => b.overdue - a.overdue).slice(0, 5);
+
+  // ─── Category breakdown ───
   const catStats = categories.map(cat => {
     const items = proposals.filter(p => p.category_name === cat.name);
     const approved = items.filter(p => p.status === 'approved');
     const pending = items.filter(p => p.status === 'pending' || p.status === 'partial');
     const rejected = items.filter(p => p.status === 'rejected');
-    const totalCost = approved.reduce((s, p) => s + (Number(p.estimated_cost) || 0), 0);
-    return { name: cat.name, total: items.length, approved: approved.length, pending: pending.length, rejected: rejected.length, totalCost };
+    const cost = approved.reduce((s, p) => s + (Number(p.estimated_cost) || 0), 0);
+    return { name: cat.name, total: items.length, approved: approved.length, pending: pending.length, rejected: rejected.length, cost };
   }).filter(c => c.total > 0);
-
-  const totalProposals = proposals.length;
-  const totalApproved = proposals.filter(p => p.status === 'approved').length;
-  const totalPending = proposals.filter(p => p.status === 'pending' || p.status === 'partial').length;
-  const totalCost = proposals.filter(p => p.status === 'approved').reduce((s, p) => s + (Number(p.estimated_cost) || 0), 0);
-
-  const totalTasks = tasks.length;
-  const taskDone = tasks.filter(t => t.status === 'done').length;
-  const taskDoing = tasks.filter(t => t.status === 'doing').length;
-  const taskOverdue = tasks.filter(t => t.status !== 'done' && t.deadline && new Date(t.deadline) < new Date()).length;
-  const taskRate = totalTasks > 0 ? Math.round((taskDone / totalTasks) * 100) : 0;
-
-  const fmtMoney = v => new Intl.NumberFormat('vi-VN').format(v) + 'đ';
   const maxCatTotal = Math.max(...catStats.map(c => c.total), 1);
 
+  // ─── AI Insights ───
+  const insights = [];
+  if (taskOverdue > 0) {
+    const sev = taskOverdue >= 5 ? 'high' : taskOverdue >= 2 ? 'medium' : 'low';
+    insights.push({ sev, icon: '🚨', text: `${taskOverdue} task đang trễ hạn${od7plus > 0 ? ` (${od7plus} trễ hơn 7 ngày — cần xử lý gấp)` : ''}. Cần rà soát lại khối lượng công việc hoặc deadline.` });
+  }
+  if (needAttention.length > 0) {
+    const names = needAttention.slice(0, 2).map(e => e.name).join(', ');
+    insights.push({ sev: 'high', icon: '👤', text: `${needAttention.length} nhân sự có task trễ hạn (${names}${needAttention.length > 2 ? '...' : ''}). Nên trao đổi trực tiếp để hỗ trợ hoặc điều chỉnh.` });
+  }
+  if (totalPending > 0 && totalPending >= totalApproved) {
+    insights.push({ sev: 'medium', icon: '📋', text: `${totalPending} đề xuất đang chờ duyệt (≥ số đã duyệt). Bottleneck phê duyệt có thể làm chậm hoạt động.` });
+  }
+  { const t = trend(taskRate, prevTaskRate);
+    if (t.dir === 'up' && t.pct >= 10) insights.push({ sev: 'low', icon: '📈', text: `Tỷ lệ hoàn thành tăng ${t.pct}% so với kỳ trước — đội ngũ đang cải thiện tốt.` });
+    if (t.dir === 'down' && t.pct >= 10) insights.push({ sev: 'medium', icon: '📉', text: `Tỷ lệ hoàn thành giảm ${t.pct}% so với kỳ trước. Cần xem lại khối lượng hoặc năng lực.` });
+  }
+  if (taskRate >= 85 && onTimeRate >= 85) insights.push({ sev: 'low', icon: '🏆', text: `Hoàn thành ${taskRate}%, đúng hạn ${onTimeRate}% — Vận hành xuất sắc! Duy trì phong độ.` });
+  if (totalCost > 0 && prevCost > 0) {
+    const ct = trend(totalCost, prevCost);
+    if (ct.dir === 'up' && ct.pct >= 20) insights.push({ sev: 'medium', icon: '💰', text: `Chi phí đề xuất tăng ${ct.pct}% so với kỳ trước (${fmtMoney(totalCost)} vs ${fmtMoney(prevCost)}). Cần kiểm soát ngân sách.` });
+  }
+  if (taskWaiting >= 3) insights.push({ sev: 'medium', icon: '⏳', text: `${taskWaiting} task đang chờ phản hồi — có thể bị "treo" do thiếu thông tin hoặc quyết định.` });
+  if (insights.length === 0 && totalTasks > 0) insights.push({ sev: 'low', icon: '✅', text: 'Không phát hiện vấn đề đáng lưu ý. Vận hành ổn định.' });
+  const sevOrder = { high: 0, medium: 1, low: 2 };
+  insights.sort((a, b) => sevOrder[a.sev] - sevOrder[b.sev]);
+
+  // ─── Trend arrow component ───
+  function TrendBadge({ cur, prev, inverse }) {
+    // inverse = true khi số giảm là TỐT (e.g. overdue)
+    const t = trend(cur, prev);
+    if (t.dir === 'flat' || prev === 0) return <span className="text-[9px] text-gray-400">—</span>;
+    const good = inverse ? t.dir === 'down' : t.dir === 'up';
+    const color = good ? 'text-green-600' : 'text-red-600';
+    const arrow = t.dir === 'up' ? '↑' : '↓';
+    return <span className={`text-[10px] font-semibold ${color}`}>{arrow}{t.pct}%</span>;
+  }
+
+  if (loading) return <div className="card p-10 text-center text-sm text-gray-400">Đang phân tích dữ liệu...</div>;
+
   return (
-    <div>
-      <h3 className="font-semibold text-sm mb-4">Báo cáo tổng quan — {department === 'hotel' ? 'Hotel' : 'Nail'}</h3>
-
-      <div className="flex gap-2 mb-5 flex-wrap items-center">
-        {['week', 'month', 'quarter', 'year'].map(p => (
-          <button key={p} onClick={() => { setPeriod(p); setDateFrom(''); setDateTo(''); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${period === p && !dateFrom ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`}
-            style={period === p && !dateFrom ? { background: '#2D5A3D' } : {}}>
-            {p === 'week' ? 'Tuần' : p === 'month' ? 'Tháng' : p === 'quarter' ? 'Quý' : 'Năm'}
-          </button>
-        ))}
-        <span className="text-xs text-gray-400 ml-1">hoặc</span>
-        <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-        <span className="text-xs text-gray-400">→</span>
-        <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+    <div className="space-y-5">
+      {/* ── HEADER + FILTERS ── */}
+      <div>
+        <h3 className="font-display font-bold text-base mb-1" style={{ color: '#2D5A3D' }}>
+          Báo cáo C-Level — {department === 'hotel' ? 'Hotel' : 'Nail'}
+        </h3>
+        <p className="text-[11px] text-gray-500 mb-3">Phân tích toàn diện giúp ra quyết định nhanh. Dữ liệu so sánh với kỳ trước cùng thời lượng.</p>
+        <div className="flex gap-2 flex-wrap items-center">
+          {['week', 'month', 'quarter', 'year'].map(p => (
+            <button key={p} onClick={() => { setPeriod(p); setDateFrom(''); setDateTo(''); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${period === p && !dateFrom ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`}
+              style={period === p && !dateFrom ? { background: '#2D5A3D' } : {}}>
+              {p === 'week' ? 'Tuần' : p === 'month' ? 'Tháng' : p === 'quarter' ? 'Quý' : 'Năm'}
+            </button>
+          ))}
+          <span className="text-xs text-gray-400 ml-1">hoặc</span>
+          <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          <span className="text-xs text-gray-400">→</span>
+          <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+          {(dateFrom || dateTo) && <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-xs text-red-500 hover:underline">Xóa</button>}
+        </div>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <div className="card p-4 text-center"><p className="text-2xl font-bold" style={{ color: '#2D5A3D' }}>{totalProposals}</p><p className="text-[10px] text-gray-500 mt-1">Tổng đề xuất</p></div>
-        <div className="card p-4 text-center"><p className="text-2xl font-bold text-green-600">{totalApproved}</p><p className="text-[10px] text-gray-500 mt-1">Đã duyệt</p></div>
-        <div className="card p-4 text-center"><p className="text-2xl font-bold text-amber-600">{totalPending}</p><p className="text-[10px] text-gray-500 mt-1">Chờ duyệt</p></div>
-        <div className="card p-4 text-center"><p className="text-2xl font-bold" style={{ color: '#2D5A3D' }}>{fmtMoney(totalCost)}</p><p className="text-[10px] text-gray-500 mt-1">Tổng chi phí duyệt</p></div>
+      {/* ══════════ SECTION 1: HEALTH SCORE + KPI CARDS ══════════ */}
+      <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-4">
+        {/* Health Score gauge */}
+        <div className="card p-4 flex flex-col items-center justify-center">
+          <div className="relative w-24 h-24">
+            <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#f3f4f6" strokeWidth="8" />
+              <circle cx="50" cy="50" r="42" fill="none" stroke={healthColor} strokeWidth="8"
+                strokeDasharray={`${healthScore * 2.64} 264`} strokeLinecap="round" />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-2xl font-bold" style={{ color: healthColor }}>{healthScore}</span>
+              <span className="text-[8px] text-gray-400">/100</span>
+            </div>
+          </div>
+          <p className="text-[10px] font-semibold mt-1.5" style={{ color: healthColor }}>{healthLabel}</p>
+          <p className="text-[8px] text-gray-400 text-center mt-0.5">Điểm sức khỏe vận hành</p>
+        </div>
+
+        {/* KPI cards with trend */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+          {[
+            { l: 'Task tạo mới', v: totalTasks, prev: prevTaskTotal, c: '#1a1a1a' },
+            { l: 'Hoàn thành', v: taskDone, prev: prevTaskDone, c: '#16a34a' },
+            { l: 'Tỷ lệ xong', v: taskRate + '%', prev: prevTaskRate, c: taskRate >= 70 ? '#16a34a' : '#d97706', raw: taskRate },
+            { l: 'Trễ hạn', v: taskOverdue, prev: prevTaskOverdue, c: '#dc2626', inverse: true },
+            { l: 'Đúng hạn', v: onTimeRate + '%', c: onTimeRate >= 80 ? '#16a34a' : '#d97706' },
+          ].map(k => (
+            <div key={k.l} className="card p-3">
+              <p className="text-[9px] text-gray-500 uppercase tracking-wide">{k.l}</p>
+              <div className="flex items-baseline gap-1.5 mt-0.5">
+                <p className="text-xl font-bold" style={{ color: k.c }}>{k.v}</p>
+                {k.prev !== undefined && <TrendBadge cur={k.raw ?? (typeof k.v === 'number' ? k.v : 0)} prev={k.prev} inverse={k.inverse} />}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Category breakdown with bar chart */}
-      <div className="card p-5 mb-6">
-        <h4 className="text-sm font-semibold mb-4">Đề xuất theo loại</h4>
-        {catStats.length === 0 ? <p className="text-xs text-gray-400 text-center py-4">Chưa có dữ liệu</p> : (
-          <div className="space-y-3">
+      {/* ══════════ SECTION 2: TREND SO VỚI KỲ TRƯỚC ══════════ */}
+      <div className="card p-4">
+        <h4 className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+          So sánh với {dateFrom ? 'kỳ trước' : periodLabel[period] + ' trước'}
+        </h4>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { l: 'Task mới', cur: totalTasks, prev: prevTaskTotal },
+            { l: 'Hoàn thành', cur: taskDone, prev: prevTaskDone },
+            { l: 'Đề xuất', cur: totalProposals, prev: prevPropTotal },
+            { l: 'Chi phí duyệt', cur: totalCost, prev: prevCost, isMoney: true },
+          ].map(r => {
+            const t = trend(r.cur, r.prev);
+            return (
+              <div key={r.l} className="rounded-xl p-3 bg-gray-50">
+                <p className="text-[9px] text-gray-500 uppercase">{r.l}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm font-bold text-gray-800">{r.isMoney ? fmtMoney(r.cur) : r.cur}</span>
+                  <span className="text-[9px] text-gray-400">vs</span>
+                  <span className="text-[10px] text-gray-500">{r.isMoney ? fmtMoney(r.prev) : r.prev}</span>
+                </div>
+                <div className="mt-1">
+                  {t.dir === 'flat' ? <span className="text-[10px] text-gray-400">Không đổi</span> : (
+                    <span className={`text-[10px] font-semibold ${t.dir === 'up' ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {t.dir === 'up' ? '▲' : '▼'} {t.pct}% ({t.delta > 0 ? '+' : ''}{r.isMoney ? fmtMoney(t.delta) : t.delta})
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ══════════ SECTION 3: BOTTLENECK ANALYSIS ══════════ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Overdue breakdown */}
+        <div className="card p-4">
+          <h4 className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Phân tích trễ hạn
+          </h4>
+          {taskOverdue === 0 ? (
+            <div className="text-center py-4"><p className="text-2xl">✅</p><p className="text-xs text-gray-500 mt-1">Không có task trễ hạn</p></div>
+          ) : (
+            <div className="space-y-2">
+              {[
+                { l: '1–3 ngày', v: od1to3, c: '#d97706', bg: '#fef3c7' },
+                { l: '3–7 ngày', v: od3to7, c: '#ea580c', bg: '#ffedd5' },
+                { l: '> 7 ngày', v: od7plus, c: '#dc2626', bg: '#fee2e2' },
+              ].map(b => (
+                <div key={b.l} className="flex items-center gap-2">
+                  <span className="text-[10px] text-gray-500 w-16">{b.l}</span>
+                  <div className="flex-1 h-5 bg-gray-100 rounded-md overflow-hidden">
+                    {b.v > 0 && <div className="h-full rounded-md flex items-center justify-center text-[9px] text-white font-bold" style={{ width: `${Math.max((b.v / taskOverdue) * 100, 15)}%`, background: b.c }}>{b.v}</div>}
+                  </div>
+                </div>
+              ))}
+              <p className="text-[10px] text-gray-400 mt-1">Tổng: {taskOverdue} task trễ hạn{od7plus > 0 ? ' — ⚠ có task trễ nghiêm trọng' : ''}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Staff needing attention */}
+        <div className="card p-4">
+          <h4 className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.924-.833-2.694 0L4.07 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+            Nhân sự cần chú ý
+          </h4>
+          {needAttention.length === 0 ? (
+            <div className="text-center py-4"><p className="text-2xl">👍</p><p className="text-xs text-gray-500 mt-1">Tất cả nhân sự đang on-track</p></div>
+          ) : (
+            <div className="space-y-2">
+              {needAttention.map((e, i) => (
+                <div key={e.id} className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: e.avatar_color || '#f3f4f6', color: '#333' }}>{ini(e.name)}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium truncate">{e.name}</p>
+                    <p className="text-[9px] text-gray-400">{e.done}/{e.total} xong · {e.rate}%</p>
+                  </div>
+                  <span className="text-[10px] font-bold text-red-600 flex-shrink-0">{e.overdue} trễ</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ══════════ SECTION 4: EMPLOYEE EFFICIENCY RANKING ══════════ */}
+      {empStats.length > 0 && (
+        <div className="card p-4">
+          <h4 className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+            Xếp hạng hiệu quả nhân sự ({empStats.length} người)
+          </h4>
+          <div className="space-y-1.5">
+            {empStats.map((e, i) => {
+              const rc = e.rate >= 80 ? '#16a34a' : e.rate >= 50 ? '#d97706' : '#dc2626';
+              return (
+                <div key={e.id} className="flex items-center gap-2 py-1.5">
+                  <span className="text-[10px] font-bold text-gray-300 w-5 text-right">#{i + 1}</span>
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: e.avatar_color, color: '#333' }}>{ini(e.name)}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium truncate">{e.name}</span>
+                      <span className="text-[9px] text-gray-400">{e.position}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-[120px]">
+                        <div className="h-full rounded-full" style={{ width: `${e.rate}%`, background: rc }} />
+                      </div>
+                      <span className="text-[9px] text-gray-400">{e.done}/{e.total}</span>
+                    </div>
+                  </div>
+                  <span className="text-sm font-bold w-10 text-right" style={{ color: rc }}>{e.rate}%</span>
+                  {e.overdue > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-semibold flex-shrink-0">{e.overdue} trễ</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════ SECTION 5: ĐỀ XUẤT + CHI PHÍ ══════════ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Proposal summary */}
+        <div className="card p-4">
+          <h4 className="text-xs font-semibold text-gray-700 mb-3">Đề xuất & Phê duyệt</h4>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="bg-gray-50 rounded-xl p-2.5 text-center"><p className="text-lg font-bold" style={{ color: '#2D5A3D' }}>{totalProposals}</p><p className="text-[9px] text-gray-500">Tổng</p></div>
+            <div className="bg-gray-50 rounded-xl p-2.5 text-center"><p className="text-lg font-bold text-green-600">{approvalRate}%</p><p className="text-[9px] text-gray-500">Tỷ lệ duyệt</p></div>
+          </div>
+          {/* Mini donut-like status breakdown */}
+          <div className="flex items-center gap-3 mb-2">
+            <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden flex">
+              {totalProposals > 0 && totalApproved > 0 && <div className="bg-green-500 h-full" style={{ width: `${(totalApproved / totalProposals) * 100}%` }} />}
+              {totalProposals > 0 && totalPending > 0 && <div className="bg-amber-400 h-full" style={{ width: `${(totalPending / totalProposals) * 100}%` }} />}
+              {totalProposals > 0 && totalRejected > 0 && <div className="bg-red-400 h-full" style={{ width: `${(totalRejected / totalProposals) * 100}%` }} />}
+            </div>
+          </div>
+          <div className="flex gap-3 text-[10px] text-gray-500">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-green-500" />{totalApproved} duyệt</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-amber-400" />{totalPending} chờ</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-red-400" />{totalRejected} từ chối</span>
+          </div>
+        </div>
+
+        {/* Cost analysis */}
+        <div className="card p-4">
+          <h4 className="text-xs font-semibold text-gray-700 mb-3">Phân tích chi phí</h4>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-500">Tổng chi phí đã duyệt</span>
+              <span className="text-sm font-bold" style={{ color: '#2D5A3D' }}>{fmtMoney(totalCost)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-500">So với kỳ trước</span>
+              {(() => { const t = trend(totalCost, prevCost); return t.dir === 'flat' ? <span className="text-[10px] text-gray-400">Không đổi</span> : <span className={`text-[10px] font-semibold ${t.dir === 'up' ? 'text-red-600' : 'text-green-600'}`}>{t.dir === 'up' ? '▲' : '▼'} {t.pct}%</span>; })()}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-500">TB/đề xuất duyệt</span>
+              <span className="text-xs font-semibold text-gray-700">{totalApproved > 0 ? fmtMoney(Math.round(totalCost / totalApproved)) : '—'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-500">TB hoàn thành task</span>
+              <span className="text-xs font-semibold text-gray-700">{avgDays} ngày</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Category breakdown (enhanced) */}
+      {catStats.length > 0 && (
+        <div className="card p-4">
+          <h4 className="text-xs font-semibold text-gray-700 mb-3">Đề xuất theo loại</h4>
+          <div className="space-y-2.5">
             {catStats.map(cat => (
               <div key={cat.name}>
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-0.5">
                   <span className="text-xs font-medium">{cat.name}</span>
-                  <span className="text-[10px] text-gray-400">{cat.total} đề xuất · {fmtMoney(cat.totalCost)}</span>
+                  <span className="text-[10px] text-gray-400">{cat.total} · {fmtMoney(cat.cost)}</span>
                 </div>
-                <div className="flex h-5 rounded-lg overflow-hidden bg-gray-100">
-                  {cat.approved > 0 && <div className="bg-green-500 flex items-center justify-center text-[9px] text-white font-semibold" style={{ width: `${(cat.approved / maxCatTotal) * 100}%`, minWidth: '20px' }}>{cat.approved}</div>}
-                  {cat.pending > 0 && <div className="bg-amber-400 flex items-center justify-center text-[9px] text-white font-semibold" style={{ width: `${(cat.pending / maxCatTotal) * 100}%`, minWidth: '20px' }}>{cat.pending}</div>}
-                  {cat.rejected > 0 && <div className="bg-red-400 flex items-center justify-center text-[9px] text-white font-semibold" style={{ width: `${(cat.rejected / maxCatTotal) * 100}%`, minWidth: '20px' }}>{cat.rejected}</div>}
+                <div className="flex h-4 rounded-md overflow-hidden bg-gray-100">
+                  {cat.approved > 0 && <div className="bg-green-500 flex items-center justify-center text-[8px] text-white font-bold" style={{ width: `${(cat.approved / maxCatTotal) * 100}%`, minWidth: '16px' }}>{cat.approved}</div>}
+                  {cat.pending > 0 && <div className="bg-amber-400 flex items-center justify-center text-[8px] text-white font-bold" style={{ width: `${(cat.pending / maxCatTotal) * 100}%`, minWidth: '16px' }}>{cat.pending}</div>}
+                  {cat.rejected > 0 && <div className="bg-red-400 flex items-center justify-center text-[8px] text-white font-bold" style={{ width: `${(cat.rejected / maxCatTotal) * 100}%`, minWidth: '16px' }}>{cat.rejected}</div>}
                 </div>
               </div>
             ))}
-            <div className="flex gap-4 mt-3 text-[10px] text-gray-500">
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-green-500" /> Duyệt</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-400" /> Chờ</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-400" /> Từ chối</span>
-            </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* ══════════ SECTION 6: CÔNG VIỆC TỔNG QUAN (enhanced) ══════════ */}
+      <div className="card p-4">
+        <h4 className="text-xs font-semibold text-gray-700 mb-3">Tổng quan công việc</h4>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+          {[
+            { l: 'Tổng task', v: totalTasks, c: '#1a1a1a' },
+            { l: 'Hoàn thành', v: taskDone, c: '#16a34a' },
+            { l: 'Đang làm', v: taskDoing, c: '#2563eb' },
+            { l: 'Chờ phản hồi', v: taskWaiting, c: '#d97706' },
+            { l: 'Trễ hạn', v: taskOverdue, c: '#dc2626' },
+          ].map(s => (
+            <div key={s.l} className="bg-gray-50 rounded-xl p-2.5 text-center">
+              <p className="text-lg font-bold" style={{ color: s.c }}>{s.v}</p>
+              <p className="text-[9px] text-gray-500">{s.l}</p>
+            </div>
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400 w-20">Hoàn thành</span>
+            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-green-500" style={{ width: `${taskRate}%` }} /></div>
+            <span className="text-[10px] font-bold w-9 text-right" style={{ color: taskRate >= 70 ? '#16a34a' : taskRate >= 40 ? '#d97706' : '#dc2626' }}>{taskRate}%</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400 w-20">Đúng hạn</span>
+            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${onTimeRate}%`, background: onTimeRate >= 80 ? '#2563eb' : '#d97706' }} /></div>
+            <span className="text-[10px] font-bold w-9 text-right" style={{ color: onTimeRate >= 80 ? '#2563eb' : '#d97706' }}>{onTimeRate}%</span>
+          </div>
+        </div>
       </div>
 
-      {/* Task overview */}
-      <div className="card p-5">
-        <h4 className="text-sm font-semibold mb-4">Tổng quan công việc</h4>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <div className="bg-gray-50 rounded-xl p-3 text-center"><p className="text-lg font-bold">{totalTasks}</p><p className="text-[9px] text-gray-500">Tổng task</p></div>
-          <div className="bg-gray-50 rounded-xl p-3 text-center"><p className="text-lg font-bold text-green-600">{taskDone}</p><p className="text-[9px] text-gray-500">Hoàn thành</p></div>
-          <div className="bg-gray-50 rounded-xl p-3 text-center"><p className="text-lg font-bold text-blue-600">{taskDoing}</p><p className="text-[9px] text-gray-500">Đang làm</p></div>
-          <div className="bg-gray-50 rounded-xl p-3 text-center"><p className="text-lg font-bold text-red-600">{taskOverdue}</p><p className="text-[9px] text-gray-500">Trễ hạn</p></div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500 w-24">Tỷ lệ hoàn thành</span>
-          <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all" style={{ width: `${taskRate}%`, background: taskRate >= 70 ? '#16a34a' : taskRate >= 40 ? '#d97706' : '#dc2626' }} />
+      {/* ══════════ SECTION 7: KHUYẾN NGHỊ AI ══════════ */}
+      {insights.length > 0 && (
+        <div className="card p-4">
+          <h4 className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+            Khuyến nghị hành động
+          </h4>
+          <div className="space-y-2">
+            {insights.map((ins, i) => {
+              const bg = ins.sev === 'high' ? 'bg-red-50 border-l-red-500' : ins.sev === 'medium' ? 'bg-amber-50 border-l-amber-500' : 'bg-emerald-50 border-l-emerald-500';
+              return (
+                <div key={i} className={`p-3 rounded-lg border-l-[3px] ${bg}`}>
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm flex-shrink-0">{ins.icon}</span>
+                    <p className="text-xs text-gray-700 leading-relaxed">{ins.text}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <span className="text-sm font-bold w-12 text-right" style={{ color: taskRate >= 70 ? '#16a34a' : taskRate >= 40 ? '#d97706' : '#dc2626' }}>{taskRate}%</span>
         </div>
-      </div>
+      )}
     </div>
   );
 }

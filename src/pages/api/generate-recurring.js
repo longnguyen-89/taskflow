@@ -20,10 +20,10 @@ function ymd(d) {
 }
 
 export default async function handler(req, res) {
-  // Allow Vercel cron OR manual call with secret
+  // Allow Vercel cron OR manual call with secret (server-side only, NOT public key)
   const auth = req.headers['x-api-key'] || req.query.key;
   const isCron = req.headers['user-agent']?.includes('vercel-cron');
-  if (!isCron && auth !== process.env.NEXT_PUBLIC_CRON_SECRET) {
+  if (!isCron && auth !== process.env.CRON_SECRET) {
     return res.status(401).json({ error: 'unauthorized' });
   }
 

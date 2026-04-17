@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { email, password, name, role, position, department, branches } = req.body;
+  const { email, password, name, role, position, department, branches, requesterId } = req.body;
 
   if (!email || !password || !name) {
     return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
@@ -15,6 +15,13 @@ export default async function handler(req, res) {
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
+
+  // Auth check: chỉ director mới được tạo user
+  if (!requesterId) return res.status(403).json({ error: 'Thiếu requesterId' });
+  const { data: requester, error: reqErr } = await supabaseAdmin
+    .from('profiles').select('role').eq('id', requesterId).single();
+  if (reqErr || !requester) return res.status(403).json({ error: 'Không tìm thấy người gọi' });
+  if (requester.role !== 'director') return res.status(403).json({ error: 'Chỉ Tổng Giám đốc mới được tạo tài khoản' });
 
   // Create auth user
   const { data, error } = await supabaseAdmin.auth.admin.createUser({

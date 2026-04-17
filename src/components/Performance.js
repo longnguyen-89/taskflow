@@ -63,7 +63,7 @@ export default function Performance({ tasks, members, department, userId, profil
 
       return { member, total: mt.length, done: done.length, doing: doing.length, waiting: waiting.length, overdue: overdue.length, cr, otr, avg: avg.toFixed(1), score: Math.round(score), grade, gc, feedback };
     }).sort((a, b) => b.score - a.score);
-  }, [tasks, members, period, department, userId, isAdmin, isDirector, dateFrom, dateTo]);
+  }, [tasks, members, period, department, userId, profile, isAdmin, isDirector, dateFrom, dateTo]);
 
   const ini = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 

@@ -15,9 +15,10 @@ webpush.setVapidDetails(
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Simple API key auth
+  // API key auth — accept both CRON_SECRET (server-side cron) and NEXT_PUBLIC_CRON_SECRET (client-side calls)
   const apiKey = req.headers['x-api-key'];
-  if (apiKey !== process.env.CRON_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const validKeys = [process.env.CRON_SECRET, process.env.NEXT_PUBLIC_CRON_SECRET].filter(Boolean);
+  if (!apiKey || !validKeys.includes(apiKey)) return res.status(401).json({ error: 'Unauthorized' });
 
   const { userId, title, body, url, tag } = req.body;
 
