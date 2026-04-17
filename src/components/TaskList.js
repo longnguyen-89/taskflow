@@ -49,6 +49,33 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     toast(newPinned ? '📌 Đã ghim task' : 'Đã bỏ ghim', 'success');
     onRefresh && onRefresh();
   }
+
+  // Feature 11: Smart @mention - Gan nguoi duoc @mention lam assignee voi 1 click.
+  // Quyen: admin/director duoc gan; member chi duoc gan neu la creator cua task do.
+  async function assignMentionedUser(taskId, userToAssignId, userName) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const canAssign = isAdmin || isDirector || task.created_by === userId;
+    if (!canAssign) { toast('Bạn không có quyền giao task này', 'error'); return; }
+    // Kiem tra xem user da la assignee chua
+    const existing = (task.assignees || []).some(a => a.user_id === userToAssignId);
+    if (existing) { toast(userName + ' đã là người nhận task này', 'error'); return; }
+    const { error } = await supabase.from('task_assignees').insert({ task_id: taskId, user_id: userToAssignId });
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    // Gui thong bao cho nguoi nhan task
+    try {
+      await supabase.from('notifications').insert({
+        user_id: userToAssignId,
+        type: 'task_assigned',
+        title: 'Bạn được giao task',
+        message: (currentUserName || 'Ai đó') + ' vừa giao bạn task "' + task.title + '"',
+        task_id: taskId,
+      });
+      sendPush(userToAssignId, '📋 Bạn được giao task', (currentUserName || 'Ai đó') + ': "' + task.title + '"', { url: '/dashboard', tag: 'assigned-' + taskId });
+    } catch (e) { /* non-fatal */ }
+    toast('✅ Đã giao task cho ' + userName, 'success');
+    onRefresh && onRefresh();
+  }
   const [expanded, setExpanded] = useState(null);
   const [comments, setComments] = useState({});
   // Per-task comment draft: { [taskId]: { text, files, mentionedIds } }
@@ -86,8 +113,28 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
   const [subTaskFiles, setSubTaskFiles] = useState({});
 
   async function loadComments(tid) {
-    const { data } = await supabase.from('comments').select('*, user:profiles!comments_user_id_fkey(name, avatar_color)').eq('task_id', tid).order('created_at', { ascending: true });
+    // Feature 12: fetch reactions cung voi comment thong qua nested select
+    const { data } = await supabase.from('comments')
+      .select('*, user:profiles!comments_user_id_fkey(name, avatar_color), reactions:comment_reactions(id, emoji, user_id)')
+      .eq('task_id', tid)
+      .order('created_at', { ascending: true });
     setComments(p => ({ ...p, [tid]: data || [] }));
+  }
+
+  // Feature 12: Toggle reaction (emoji) len 1 comment. Neu da co reaction cua minh voi emoji do → xoa; nguoc lai → them.
+  async function toggleReaction(commentId, emoji, taskId) {
+    const commentList = comments[taskId] || [];
+    const comment = commentList.find(c => c.id === commentId);
+    if (!comment) return;
+    const existing = (comment.reactions || []).find(r => r.user_id === userId && r.emoji === emoji);
+    if (existing) {
+      const { error } = await supabase.from('comment_reactions').delete().eq('id', existing.id);
+      if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    } else {
+      const { error } = await supabase.from('comment_reactions').insert({ comment_id: commentId, user_id: userId, emoji });
+      if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    }
+    loadComments(taskId);
   }
 
   async function loadChecklist(tid) {
@@ -375,7 +422,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
                 <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: pct + '%', background: pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626' }} /></div>
                 <span className="text-[10px] font-bold text-gray-400 w-8 text-right">{pct}%</span>
               </div>
-              <div className="space-y-1.5">{g.tasks.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div>
+              <div className="space-y-1.5">{g.tasks.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div>
             </div>
           );
         })}
@@ -389,8 +436,8 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
   return (
     <div className="space-y-4">
       {overdueModalEl}
-      {todo.length > 0 &&<div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Cần làm ({todo.length})</p><div className="space-y-1.5">{todo.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
-      {done.length > 0 && <div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Đã xong ({done.length})</p><div className="space-y-1.5 opacity-50">{done.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
+      {todo.length > 0 &&<div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Cần làm ({todo.length})</p><div className="space-y-1.5">{todo.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
+      {done.length > 0 && <div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Đã xong ({done.length})</p><div className="space-y-1.5 opacity-50">{done.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
       {parentTasks.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">Chưa có task</div>}
     </div>
   );
@@ -416,7 +463,7 @@ function FileList({ files }) {
   );
 }
 
-function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, comments, getDraft, setDraftField, addC, uid, handleAddCommentFile, removeCommentFile, uploading, subTasks, showSubForm, setShowSubForm, subTitle, setSubTitle, subDeadline, setSubDeadline, subFiles, handleAddSubFile, removeSubFile, createSubTask, subCreating, expandedSub, setExpandedSub, updateSubStatus, isAdmin, isDirector, canDeleteTask, delTask, togglePin, canPinTasks, mentionables, checklist, newChkText, setNewChkText, addChecklistItem, toggleChecklistItem, removeChecklistItem }) {
+function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, comments, getDraft, setDraftField, addC, uid, handleAddCommentFile, removeCommentFile, uploading, subTasks, showSubForm, setShowSubForm, subTitle, setSubTitle, subDeadline, setSubDeadline, subFiles, handleAddSubFile, removeSubFile, createSubTask, subCreating, expandedSub, setExpandedSub, updateSubStatus, isAdmin, isDirector, canDeleteTask, delTask, togglePin, canPinTasks, mentionables, assignMentionedUser, members, toggleReaction, checklist, newChkText, setNewChkText, addChecklistItem, toggleChecklistItem, removeChecklistItem }) {
   const st = ST[t.status] || ST.todo;
   const pr = PR[t.priority] || PR.medium;
   const od = isOverdue(t.deadline, t.status);
@@ -631,14 +678,7 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
           <div className="mt-3 pt-2 border-t border-gray-100">
             <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1.5">Bình luận {comments?.length > 0 && `(${comments.length})`}</p>
             {comments?.map(c => (
-              <div key={c.id} className="flex gap-2 mb-2">
-                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0 mt-0.5" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>
-                  {c.content && <p className="text-xs text-gray-600 whitespace-pre-wrap">{renderMentions(c.content, mentionables)}</p>}
-                  {c.files && c.files.length > 0 && <FileList files={c.files} />}
-                </div>
-              </div>
+              <CommentRow key={c.id} c={c} ini={ini} timeAgo={timeAgo} mentionables={mentionables} uid={uid} toggleReaction={toggleReaction} taskId={t.id} />
             ))}
             {(() => { const draft = getDraft(t.id); return (
             <div className="space-y-1.5 mt-1.5">
@@ -673,11 +713,93 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                   ))}
                 </div>
               )}
+              {/* Feature 11: Smart @mention - suggest giao task cho nguoi duoc mention nhung chua la assignee */}
+              {(() => {
+                const assigneeIds = (t.assignees || []).map(a => a.user_id);
+                const canAssign = isAdmin || isDirector || t.created_by === uid;
+                if (!canAssign) return null;
+                const suggestions = (draft.mentionedIds || [])
+                  .filter(mid => !assigneeIds.includes(mid) && mid !== uid)
+                  .map(mid => (members || []).find(m => m.id === mid))
+                  .filter(m => m && draft.text.includes('@' + m.name));
+                if (suggestions.length === 0) return null;
+                return (
+                  <div className="flex flex-wrap gap-1.5 animate-fade-in">
+                    {suggestions.map(m => (
+                      <button key={m.id} onClick={() => assignMentionedUser(t.id, m.id, m.name)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-medium text-emerald-700 transition-all">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                        </svg>
+                        <span>Giao task này cho <strong>@{m.name}</strong>?</span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
             ); })()}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Feature 12: Bo emoji reactions cho phep user like/emoji nhanh comment
+const REACTION_EMOJIS = ['👍', '✅', '❤️', '🎉', '🙏', '😂'];
+
+function CommentRow({ c, ini, timeAgo, mentionables, uid, toggleReaction, taskId }) {
+  const [showPicker, setShowPicker] = useState(false);
+  // Nhom reactions theo emoji de dem count + biet minh da react chua
+  const reactionGroups = {};
+  (c.reactions || []).forEach(r => {
+    if (!reactionGroups[r.emoji]) reactionGroups[r.emoji] = { count: 0, mine: false };
+    reactionGroups[r.emoji].count += 1;
+    if (r.user_id === uid) reactionGroups[r.emoji].mine = true;
+  });
+  const reactionEntries = Object.entries(reactionGroups);
+
+  return (
+    <div className="flex gap-2 mb-2 group relative">
+      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0 mt-0.5" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>
+        {c.content && <p className="text-xs text-gray-600 whitespace-pre-wrap">{renderMentions(c.content, mentionables)}</p>}
+        {c.files && c.files.length > 0 && <FileList files={c.files} />}
+        {/* Reactions display + picker */}
+        <div className="flex items-center gap-1 mt-1 flex-wrap">
+          {reactionEntries.map(([emoji, info]) => (
+            <button key={emoji} onClick={() => toggleReaction(c.id, emoji, taskId)}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] transition-all ${info.mine ? 'bg-blue-100 border border-blue-300 text-blue-700' : 'bg-gray-100 border border-transparent text-gray-600 hover:bg-gray-200'}`}>
+              <span>{emoji}</span>
+              <span className="font-semibold">{info.count}</span>
+            </button>
+          ))}
+          {/* Add reaction button - hien khi hover comment */}
+          <div className="relative">
+            <button onClick={() => setShowPicker(v => !v)}
+              className={`px-1.5 py-0.5 rounded-full text-[10px] text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all ${reactionEntries.length === 0 ? 'opacity-0 group-hover:opacity-100' : ''}`}
+              title="Thêm reaction">
+              😊+
+            </button>
+            {showPicker && (
+              <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1 flex gap-0.5 z-10 animate-fade-in">
+                {REACTION_EMOJIS.map(emoji => {
+                  const mine = reactionGroups[emoji]?.mine;
+                  return (
+                    <button key={emoji} onClick={() => { toggleReaction(c.id, emoji, taskId); setShowPicker(false); }}
+                      className={`w-7 h-7 rounded flex items-center justify-center text-base hover:bg-gray-100 transition-all ${mine ? 'bg-blue-50' : ''}`}
+                      title={mine ? 'Bỏ ' + emoji : 'Thêm ' + emoji}>
+                      {emoji}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

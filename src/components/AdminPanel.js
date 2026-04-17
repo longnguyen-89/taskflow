@@ -4,6 +4,7 @@ import { toast } from '@/components/Toaster';
 import { useAuth } from '@/contexts/AuthContext';
 import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
 import { ACTION_LABELS, ACTION_ICONS } from '@/lib/activityLog';
+import PriceHistorySection from '@/components/PriceHistory';
 
 const POSITIONS = ['Quản lý', 'Kỹ thuật viên', 'Lễ tân', 'Kế toán', 'Buồng phòng', 'Bảo vệ'];
 const ROLES = [
@@ -21,6 +22,7 @@ const MENU = [
   { id: 'groups', label: 'Nhóm công việc', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
   { id: 'categories', label: 'Loại đề xuất', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z' },
   { id: 'activity', label: 'Lịch sử', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { id: 'price_history', label: 'Lịch sử giá', icon: 'M3 3v18h18M7 14l4-4 4 4 5-5' },
   { id: 'reports', label: 'Báo cáo', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
   { id: 'appearance', label: 'Giao diện', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01' },
 ];
@@ -52,6 +54,7 @@ export default function AdminPanel({ members, department, onRefresh, dynamicBran
       {section === 'groups' && <GroupsSection department={department} onRefresh={onRefresh} />}
       {section === 'categories' && <CategoriesSection />}
       {section === 'activity' && <ActivityLogSection department={department} />}
+      {section === 'price_history' && <PriceHistorySection department={department} />}
       {section === 'reports' && <ReportsSection department={department} />}
       {section === 'appearance' && <AppearanceSection />}
     </div>
