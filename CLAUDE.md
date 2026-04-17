@@ -208,3 +208,31 @@ profiles, tasks, task_assignees, task_watchers, task_files, task_groups, task_ch
   5. Console: no errors. Build 23s.
 - **DEPLOYED**: dpl_J24PQtvdHvwXc7zG89StKn5dLbB2 (commit c18734a). Production alias `cce-tasks.vercel.app` da cap nhat.
 - **Safety**: migration idempotent (IF NOT EXISTS, DEFAULT false) — khong anh huong 29 task hien co, tat ca mac dinh `pinned = false`.
+
+### 2026-04-17 (end-of-day) — Features 10, 11, 12: Price History + Smart @mention + Comment Reactions
+- **Yeu cau user**: "Lich su gia - Theo doi gia mua cua tung mat hang qua cac de xuat. Phat hien gia tang bat thuong. @mention thong minh hon - Khi @mention trong comment, auto goi y context: 'Giao task nay cho @Truc?' -> 1 click gan assignee. Reactions tren comment - Like/emoji nhanh thay vi phai reply 'OK', 'Da nhan'. Lam cac phan tren".
+- **Feature 10 — Lich su gia mua hang (Price History)**:
+  - New file `src/components/PriceHistory.js` (~260 dong).
+  - Query `proposals` co items, loc `category_name != 'Thanh toán'` (chi de xuat Mua hang).
+  - Group by `normalizeName(item.name)` (lowercase, bo dau, trim). Moi group tinh: min/max/avg/latest price + entries[] sorted desc theo date.
+  - Classify latest vs avg: >50% = "Tang manh" (🚨 do), >20% = "Tang" (📈 cam), <-20% = "Giam" (📉 xanh), else = "Binh thuong" (📦 xam).
+  - UI: 3 thẻ KPI (so mat hang, so abnormal, so de xuat da duyet) + search + filter (all/approved/pending) + sort (abnormal/recent/count/name) + main list card.
+  - Row expand → hien toan bo lich su mua: date · title · creator · branch · status · SL · price · % thay doi so voi entry truoc.
+  - AdminPanel: them menu "Lich su gia" (icon line-chart) giua "Lich su" va "Bao cao".
+- **Feature 11 — Smart @mention suggest-assign**:
+  - Trong TaskList, them ham `assignMentionedUser(taskId, userId, userName)`: insert `task_assignees`, gui notify + push.
+  - Permission giao task: `isAdmin || isDirector || t.created_by === uid` (creator luon co quyen gan cho task cua minh).
+  - UI: ngay duoi CommentInput (trong Row), khi `draft.mentionedIds` chua co nguoi chua-la-assignee VA tex comment van con chua `@Name`, hien chip xanh `Giao task nay cho @Name?` voi icon user-plus.
+  - Click chip → `assignMentionedUser()` → toast "✅ Da giao task cho Name" + `onRefresh()`.
+  - Han che: chi hien cho member la mentionable (khong hien cho chinh minh, khong hien cho nguoi da la assignee).
+- **Feature 12 — Reactions tren comment**:
+  - New migration `supabase-migration-2026-04-17c.sql`: bang `comment_reactions(id, comment_id FK, user_id FK, emoji, created_at, UNIQUE(comment_id, user_id, emoji))`. RLS: SELECT public, INSERT/DELETE chi cho `auth.uid() = user_id`. Apply qua Supabase MCP.
+  - `loadComments` tang nested select: `reactions:comment_reactions(id, emoji, user_id)` — Supabase auto-detect FK.
+  - Ham `toggleReaction(commentId, emoji, taskId)`: neu minh da react → delete; chua → insert. Sau do reload comments cua task.
+  - New component `CommentRow` (extract tu inline): render avatar + name + time + content + files + reactions + picker. Mappers reactions theo emoji de dem count + biet minh da react chua.
+  - 6 emoji: 👍 ✅ ❤️ 🎉 🙏 😂. Display pill `emoji count` duoi comment; pill xanh border khi minh da react.
+  - Hover comment → hien button `😊+` o cuoi; click mo popover picker; click emoji trong picker → toggle + dong picker.
+- **Files**: 1 new component (`PriceHistory.js`), 1 new migration, 2 modified (`AdminPanel.js`: import+menu+section; `TaskList.js`: loadComments nested, assignMentionedUser, toggleReaction, CommentRow extract, suggest-chip UI).
+- **Prop threading**: `assignMentionedUser`, `members`, `toggleReaction` them vao Row props + 3 Row call sites (2 trong view thong thuong, 1 trong view groupByAssignee).
+- **DEPLOYED**: commit a2689ab, deployment dpl_H6qgrMnDh5d2qn9phDcMoEHpcXWs. Migration `comment_reactions_feature_12` da apply tren Supabase taskflow project (dvoagdhbbppqpofzlkju).
+- **Safety**: migration idempotent, khong anh huong 61 comment hien co. PriceHistory chi doc proposals + items — khong sua du lieu. Smart @mention chi dung quyen san co (check assignee trung, check permission). Reactions FK CASCADE → khi xoa comment thi xoa luon reactions.
