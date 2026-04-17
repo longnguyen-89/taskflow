@@ -14,7 +14,10 @@ export const BRANCH_LABEL = {
 };
 
 export function branchLabel(id, dynamicBranches) {
-  if (dynamicBranches) {
+  // Guard: khi ham duoc dung lam callback cho Array.prototype.map,
+  // tham so thu 2 se la index (number), khong phai array. Kiem tra Array.isArray
+  // de tranh crash "t.find is not a function".
+  if (Array.isArray(dynamicBranches)) {
     const found = dynamicBranches.find(b => b.id === id);
     if (found) return found.label;
   }
