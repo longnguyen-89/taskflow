@@ -25,7 +25,7 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-export default function TaskList({ tasks, members, isAdmin, isDirector, canDeleteTask, userId, onRefresh, department, currentUserRole, currentUserName, focusTaskId, clearFocus }) {
+export default function TaskList({ tasks, members, isAdmin, isDirector, canDeleteTask, canPinTasks, userId, onRefresh, department, currentUserRole, currentUserName, focusTaskId, clearFocus }) {
 
   // Xoá task cứng (TGĐ hoặc Admin có quyền). Có confirm 2 bước.
   async function deleteTask(taskId, taskTitle) {
@@ -37,6 +37,16 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     const { error } = await deleteTaskCascade(taskId, userId);
     if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
     toast('Đã xoá task', 'success');
+    onRefresh && onRefresh();
+  }
+
+  // Feature 9: Pin/unpin task (admin + director + accountant). Task ghim hien len dau danh sach.
+  async function togglePin(taskId, currentPinned, taskTitle) {
+    if (!canPinTasks) return;
+    const newPinned = !currentPinned;
+    const { error } = await supabase.from('tasks').update({ pinned: newPinned, updated_at: new Date().toISOString() }).eq('id', taskId);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    toast(newPinned ? '📌 Đã ghim task' : 'Đã bỏ ghim', 'success');
     onRefresh && onRefresh();
   }
   const [expanded, setExpanded] = useState(null);
@@ -294,8 +304,11 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
   const timeAgo = d => { const m = Math.floor((Date.now() - new Date(d)) / 60000); if (m < 1) return 'Vừa xong'; if (m < 60) return m + 'p'; const h = Math.floor(m / 60); if (h < 24) return h + 'h'; return Math.floor(h / 24) + 'd'; };
   const isOverdue = (d, s) => s !== 'done' && d && new Date(d) < new Date();
 
-  // Only show parent tasks (no parent_id)
-  const parentTasks = tasks.filter(t => !t.parent_id);
+  // Only show parent tasks (no parent_id). Feature 9: pinned tasks len dau.
+  const parentTasks = tasks.filter(t => !t.parent_id).sort((a, b) => {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1; // pinned truoc
+    return 0; // giu nguyen thu tu cu (da sort theo created_at desc tu DB)
+  });
 
   // Overdue reason modal — rendered above all views
   const overdueModalEl = overdueModal && (
@@ -362,7 +375,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
                 <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: pct + '%', background: pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626' }} /></div>
                 <span className="text-[10px] font-bold text-gray-400 w-8 text-right">{pct}%</span>
               </div>
-              <div className="space-y-1.5">{g.tasks.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} mentionables={mentionables} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div>
+              <div className="space-y-1.5">{g.tasks.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div>
             </div>
           );
         })}
@@ -376,8 +389,8 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
   return (
     <div className="space-y-4">
       {overdueModalEl}
-      {todo.length > 0 &&<div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Cần làm ({todo.length})</p><div className="space-y-1.5">{todo.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} mentionables={mentionables} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
-      {done.length > 0 && <div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Đã xong ({done.length})</p><div className="space-y-1.5 opacity-50">{done.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} mentionables={mentionables} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
+      {todo.length > 0 &&<div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Cần làm ({todo.length})</p><div className="space-y-1.5">{todo.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
+      {done.length > 0 && <div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Đã xong ({done.length})</p><div className="space-y-1.5 opacity-50">{done.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
       {parentTasks.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">Chưa có task</div>}
     </div>
   );
@@ -403,7 +416,7 @@ function FileList({ files }) {
   );
 }
 
-function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, comments, getDraft, setDraftField, addC, uid, handleAddCommentFile, removeCommentFile, uploading, subTasks, showSubForm, setShowSubForm, subTitle, setSubTitle, subDeadline, setSubDeadline, subFiles, handleAddSubFile, removeSubFile, createSubTask, subCreating, expandedSub, setExpandedSub, updateSubStatus, isAdmin, isDirector, canDeleteTask, delTask, mentionables, checklist, newChkText, setNewChkText, addChecklistItem, toggleChecklistItem, removeChecklistItem }) {
+function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, comments, getDraft, setDraftField, addC, uid, handleAddCommentFile, removeCommentFile, uploading, subTasks, showSubForm, setShowSubForm, subTitle, setSubTitle, subDeadline, setSubDeadline, subFiles, handleAddSubFile, removeSubFile, createSubTask, subCreating, expandedSub, setExpandedSub, updateSubStatus, isAdmin, isDirector, canDeleteTask, delTask, togglePin, canPinTasks, mentionables, checklist, newChkText, setNewChkText, addChecklistItem, toggleChecklistItem, removeChecklistItem }) {
   const st = ST[t.status] || ST.todo;
   const pr = PR[t.priority] || PR.medium;
   const od = isOverdue(t.deadline, t.status);
@@ -413,9 +426,10 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
   const hasSubs = subs.length > 0;
 
   return (
-    <div id={'task-row-' + t.id} className={`border rounded-xl transition-all ${od ? 'border-l-[3px] border-l-red-500 border-red-200' : 'border-gray-100'} ${exp ? 'bg-gray-50/50' : 'bg-white hover:bg-gray-50/30'}`}>
+    <div id={'task-row-' + t.id} className={`border rounded-xl transition-all ${t.pinned ? 'border-l-[3px] border-l-amber-500 bg-amber-50/20' : od ? 'border-l-[3px] border-l-red-500 border-red-200' : 'border-gray-100'} ${exp ? 'bg-gray-50/50' : 'bg-white hover:bg-gray-50/30'}`}>
       <div className="flex items-center gap-2 p-3 cursor-pointer" onClick={toggle}>
         <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: st.c }} />
+        {t.pinned && <span className="text-xs flex-shrink-0" title="Đã ghim">📌</span>}
         <p className={`text-sm font-medium flex-1 truncate ${t.status === 'done' ? 'line-through text-gray-400' : ''}`}>{t.title}</p>
         {hasSubs && <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 font-semibold flex-shrink-0">{subDone}/{subs.length} con</span>}
         {assigneeNames && <span className="text-[10px] text-gray-400 truncate max-w-[120px]">{assigneeNames}</span>}
@@ -432,15 +446,26 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
             {t.deadline && <span>Hạn: {fmtDT(t.deadline)}</span>}
             {t.completed_at && <span>Xong: {fmtDT(t.completed_at)}</span>}
             <span>Giao bởi: {t.creator?.name}</span>
-            {(isDirector || canDeleteTask) && delTask && (
-              <button
-                onClick={(e) => { e.stopPropagation(); delTask(t.id, t.title); }}
-                className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-red-600 hover:bg-red-50 transition-colors"
-                title="Xoá vĩnh viễn">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
-                Xoá
-              </button>
-            )}
+            <div className="ml-auto flex items-center gap-1">
+              {canPinTasks && togglePin && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); togglePin(t.id, t.pinned, t.title); }}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${t.pinned ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-gray-500 hover:bg-gray-100'}`}
+                  title={t.pinned ? 'Bỏ ghim' : 'Ghim task lên đầu'}>
+                  <span className="text-[11px]">📌</span>
+                  {t.pinned ? 'Bỏ ghim' : 'Ghim'}
+                </button>
+              )}
+              {(isDirector || canDeleteTask) && delTask && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); delTask(t.id, t.title); }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                  title="Xoá vĩnh viễn">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                  Xoá
+                </button>
+              )}
+            </div>
           </div>
           {t.overdue_reason && (
             <div className="mb-2 px-2 py-1.5 rounded-lg bg-red-50 border border-red-100 text-[10px]">

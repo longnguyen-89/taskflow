@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { registerPush } from '@/lib/push';
 import TaskList from '@/components/TaskList';
+import KanbanBoard from '@/components/KanbanBoard';
 import CreateTask from '@/components/CreateTask';
 import Performance from '@/components/Performance';
 import Notifications from '@/components/Notifications';
@@ -40,6 +41,17 @@ export default function Dashboard() {
   const [appearance, setAppearance] = useState({ primaryColor: '#2D5A3D', bgUrl: '', bannerText: '', bannerColor: '#2D5A3D', bannerEnabled: false });
   const [focusTaskId, setFocusTaskId] = useState(null);
   const [focusProposalId, setFocusProposalId] = useState(null);
+  // Feature 7: View mode cho tab Dashboard — 'list' (mac dinh) | 'kanban'
+  const [viewMode, setViewMode] = useState('list');
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = localStorage.getItem('taskflow_view_mode');
+    if (saved === 'kanban' || saved === 'list') setViewMode(saved);
+  }, []);
+  function changeViewMode(m) {
+    setViewMode(m);
+    if (typeof window !== 'undefined') localStorage.setItem('taskflow_view_mode', m);
+  }
 
   // Helper: focus vào 1 task trong tab Dashboard. Tự switch dept/branch nếu cần.
   const openTaskById = useCallback(async (taskId) => {
@@ -399,7 +411,43 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-            <TaskList tasks={approvedTasks} members={members} isAdmin={isDirector || isAccountant} isDirector={isDirector} canDeleteTask={canDeleteTask} userId={user.id} onRefresh={fetchData} department={dept} currentUserRole={profile?.role} currentUserName={profile?.name} focusTaskId={focusTaskId} clearFocus={() => setFocusTaskId(null)} />
+            {/* View toggle: List / Kanban */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex p-0.5 rounded-lg" style={{ background: '#f0ebe4' }}>
+                <button
+                  onClick={() => changeViewMode('list')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
+                  title="Danh sách"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                  Danh sách
+                </button>
+                <button
+                  onClick={() => changeViewMode('kanban')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'kanban' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
+                  title="Bảng Kanban"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v6a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z" /></svg>
+                  Kanban
+                </button>
+              </div>
+            </div>
+            {viewMode === 'kanban' ? (
+              <KanbanBoard
+                tasks={approvedTasks}
+                members={members}
+                isAdmin={isAdmin}
+                isDirector={isDirector}
+                canPinTasks={isAdmin || isAccountant}
+                userId={user.id}
+                onRefresh={fetchData}
+                department={dept}
+                currentUserName={profile?.name}
+                onOpenTask={(tid) => { changeViewMode('list'); setFocusTaskId(tid); }}
+              />
+            ) : (
+              <TaskList tasks={approvedTasks} members={members} isAdmin={isDirector || isAccountant} isDirector={isDirector} canDeleteTask={canDeleteTask} canPinTasks={isAdmin || isAccountant} userId={user.id} onRefresh={fetchData} department={dept} currentUserRole={profile?.role} currentUserName={profile?.name} focusTaskId={focusTaskId} clearFocus={() => setFocusTaskId(null)} />
+            )}
           </div>
         )}
         {tab === 'create' && isAdmin && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
