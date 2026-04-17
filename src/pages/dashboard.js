@@ -12,10 +12,11 @@ import Proposals from '@/components/Proposals';
 import AdminPanel from '@/components/AdminPanel';
 import RecurringTasks from '@/components/RecurringTasks';
 import SearchModal from '@/components/SearchModal';
-import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { NAIL_BRANCHES, branchLabel, loadBranches } from '@/lib/branches';
 
 export default function Dashboard() {
-  const { user, profile, loading: authLoading, signOut, isAdmin, isDirector, isAccountant, canApprove } = useAuth();
+  const { user, profile, loading: authLoading, signOut, isAdmin, isDirector, isAccountant, canApprove, canCreateTask, canDeleteTask, canApproveProposal, canManageUsers, canViewReports, changePassword } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState('dashboard');
   const canViewAll = isDirector || isAccountant;
@@ -30,6 +31,12 @@ export default function Dashboard() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showSearch, setShowSearch] = useState(false);
+  const [showPwModal, setShowPwModal] = useState(false);
+  const [pwOld, setPwOld] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [dynamicBranches, setDynamicBranches] = useState(NAIL_BRANCHES);
   const [appearance, setAppearance] = useState({ primaryColor: '#2D5A3D', bgUrl: '', bannerText: '', bannerColor: '#2D5A3D', bannerEnabled: false });
   const [focusTaskId, setFocusTaskId] = useState(null);
   const [focusProposalId, setFocusProposalId] = useState(null);
@@ -89,6 +96,7 @@ export default function Dashboard() {
         setAppearance(prev => ({ ...prev, ...v }));
       }
     });
+    loadBranches(supabase).then(b => { if (Array.isArray(b) && b.length > 0) setDynamicBranches(b); }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -101,8 +109,9 @@ export default function Dashboard() {
   // - TGĐ/Kế toán: cả 4 chi nhánh
   // - Quản lý (admin): các chi nhánh được gán trong profile.branches
   // - Nhân viên: 1 chi nhánh trong profile.branches
+  const allBranchIds = (dynamicBranches || NAIL_BRANCHES).map(b => b.id);
   const allowedBranches = (canViewAll
-    ? NAIL_BRANCHES.map(b => b.id)
+    ? allBranchIds
     : (Array.isArray(profile?.branches) ? profile.branches : [])
   );
   // Khi profile load xong, nếu user chỉ có 1 chi nhánh → auto chọn. Nếu nhiều → để null (all).
@@ -116,12 +125,12 @@ export default function Dashboard() {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4', show: true },
     { id: 'mytasks', label: 'Công việc tôi', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', show: true },
-    { id: 'create', label: 'Giao task', icon: 'M12 4v16m8-8H4', show: isAdmin },
+    { id: 'create', label: 'Giao task', icon: 'M12 4v16m8-8H4', show: canCreateTask },
     { id: 'recurring', label: 'Lặp lại', icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15', show: isAdmin },
     { id: 'proposals', label: 'Đề xuất', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', show: true },
-    { id: 'performance', label: 'Đánh giá', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', show: true },
+    { id: 'performance', label: 'Đánh giá', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', show: canViewReports },
     { id: 'notifications', label: 'Thông báo', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9', show: true },
-    { id: 'admin', label: 'Quản trị', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z', show: isDirector },
+    { id: 'admin', label: 'Quản trị', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z', show: isDirector || canManageUsers },
   ].filter(t => t.show);
 
   const fetchData = useCallback(async () => {
@@ -223,16 +232,30 @@ export default function Dashboard() {
     registerPush(user.id).catch(() => {});
   }, [user, authLoading, profile, router, fetchData]);
 
+  // Realtime: debounce fetchData để tránh N² query khi nhiều user cùng online.
+  // Filter theo department để giảm events không liên quan.
   useEffect(() => {
     if (!user) return;
-    const ch = supabase.channel('rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'proposals' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => fetchData())
+    let debounceTimer = null;
+    const debouncedFetch = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => fetchData(), 800);
+    };
+    const ch = supabase.channel('rt-' + dept)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `department=eq.${dept}` }, debouncedFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'proposals', filter: `department=eq.${dept}` }, debouncedFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, debouncedFetch)
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [user, fetchData]);
+    // Notifications: riêng channel, filter theo user_id
+    const notifCh = supabase.channel('rt-notif-' + user.id)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, debouncedFetch)
+      .subscribe();
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(ch);
+      supabase.removeChannel(notifCh);
+    };
+  }, [user, dept, fetchData]);
 
   useEffect(() => {
     const h = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setShowSearch(true); } };
@@ -297,7 +320,7 @@ export default function Dashboard() {
                   Tất cả
                 </button>
               )}
-              {NAIL_BRANCHES.filter(b => allowedBranches.includes(b.id)).map(b => (
+              {(dynamicBranches || NAIL_BRANCHES).filter(b => allowedBranches.includes(b.id)).map(b => (
                 <button key={b.id} onClick={() => setBranch(b.id)}
                   className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${branch === b.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
                   {b.label}
@@ -314,7 +337,7 @@ export default function Dashboard() {
               aria-label="Chọn chi nhánh"
             >
               {canViewAll && <option value="">Tất cả CN</option>}
-              {NAIL_BRANCHES.filter(b => allowedBranches.includes(b.id)).map(b => (
+              {(dynamicBranches || NAIL_BRANCHES).filter(b => allowedBranches.includes(b.id)).map(b => (
                 <option key={b.id} value={b.id}>{b.label}</option>
               ))}
             </select>
@@ -336,6 +359,9 @@ export default function Dashboard() {
 
           <span className="hidden sm:inline px-2 py-1 rounded-md text-[10px] font-semibold flex-shrink-0" style={{ background: '#e8f5ee', color: '#2D5A3D' }}>{ROLE_LABELS[profile.role]}</span>
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0" style={{ background: profile.avatar_color, color: '#333' }} title={profile.name + ' · ' + ROLE_LABELS[profile.role]}>{getInitials(profile.name)}</div>
+          <button onClick={() => setShowPwModal(true)} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Đổi mật khẩu">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+          </button>
           <button onClick={signOut} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Đăng xuất">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
           </button>
@@ -373,7 +399,7 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-            <TaskList tasks={approvedTasks} members={members} isAdmin={isDirector || isAccountant} isDirector={isDirector} userId={user.id} onRefresh={fetchData} department={dept} currentUserRole={profile?.role} currentUserName={profile?.name} focusTaskId={focusTaskId} clearFocus={() => setFocusTaskId(null)} />
+            <TaskList tasks={approvedTasks} members={members} isAdmin={isDirector || isAccountant} isDirector={isDirector} canDeleteTask={canDeleteTask} userId={user.id} onRefresh={fetchData} department={dept} currentUserRole={profile?.role} currentUserName={profile?.name} focusTaskId={focusTaskId} clearFocus={() => setFocusTaskId(null)} />
           </div>
         )}
         {tab === 'create' && isAdmin && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
@@ -381,11 +407,44 @@ export default function Dashboard() {
         {tab === 'performance' && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isDirector || isAccountant} isDirector={isDirector} />}
         {tab === 'mytasks' && <MyTasks tasks={myAllTasks} members={members} userId={user.id} onOpenTask={openTaskById} profileName={profile.name} />}
         {tab === 'notifications' && <Notifications notifications={notifications} userId={user.id} onRefresh={fetchData} onOpen={handleOpenNotification} />}
-        {tab === 'admin' && isDirector && <AdminPanel members={members} department={dept} onRefresh={fetchData} />}
+        {tab === 'admin' && (isDirector || canManageUsers) && (
+          <ErrorBoundary>
+            <AdminPanel members={members || []} department={dept} onRefresh={fetchData} dynamicBranches={dynamicBranches} onBranchesChanged={() => loadBranches(supabase).then(setDynamicBranches)} />
+          </ErrorBoundary>
+        )}
         {tab === 'recurring' && isAdmin && <RecurringTasks members={members} department={dept} userId={user.id} taskGroups={taskGroups} />}
       </main>
 
       {showSearch && <SearchModal tasks={tasks} onClose={() => setShowSearch(false)} onSelect={() => { setShowSearch(false); setTab('dashboard'); }} />}
+
+      {/* Password change modal */}
+      {showPwModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowPwModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="font-display font-bold text-sm mb-3" style={{ color: '#2D5A3D' }}>Đổi mật khẩu</h3>
+            <div className="space-y-3">
+              <div><label className="block text-xs font-medium text-gray-600 mb-1">Mật khẩu hiện tại</label><input type="password" className="input-field !text-sm" value={pwOld} onChange={e => setPwOld(e.target.value)} placeholder="••••••••" /></div>
+              <div><label className="block text-xs font-medium text-gray-600 mb-1">Mật khẩu mới</label><input type="password" className="input-field !text-sm" value={pwNew} onChange={e => setPwNew(e.target.value)} placeholder="Tối thiểu 6 ký tự" /></div>
+              <div><label className="block text-xs font-medium text-gray-600 mb-1">Xác nhận mật khẩu mới</label><input type="password" className="input-field !text-sm" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} placeholder="Nhập lại mật khẩu mới" /></div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button disabled={pwLoading} onClick={async () => {
+                if (!pwOld || !pwNew) return;
+                if (pwNew !== pwConfirm) { alert('Mật khẩu mới không khớp'); return; }
+                if (pwNew.length < 6) { alert('Mật khẩu mới tối thiểu 6 ký tự'); return; }
+                setPwLoading(true);
+                const { error } = await changePassword(profile.email, pwOld, pwNew);
+                setPwLoading(false);
+                if (error) { alert('Lỗi: ' + error.message); return; }
+                alert('Đổi mật khẩu thành công!'); setShowPwModal(false); setPwOld(''); setPwNew(''); setPwConfirm('');
+              }} className="flex-1 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>
+                {pwLoading ? 'Đang xử lý...' : 'Đổi mật khẩu'}
+              </button>
+              <button onClick={() => { setShowPwModal(false); setPwOld(''); setPwNew(''); setPwConfirm(''); }} className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">Hủy</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
