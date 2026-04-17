@@ -182,3 +182,29 @@ profiles, tasks, task_assignees, task_watchers, task_files, task_groups, task_ch
 - **Verification**: click qua 4 tab "Quan tri > Tai khoan / Chi nhanh / Phan quyen / Lich su" tren https://cce-tasks.vercel.app — tat ca render OK, khong crash. DB tables `activity_log`, `app_settings`, `branches` deu da ton tai tren Supabase taskflow project (dvoagdhbbppqpofzlkju).
 - **DEPLOYED**: dpl_BB9wX6xubVZihqfFaC1ZaKaDNXv1 (4dce41e — commit features) → dpl_2MEcisoG656hFiYUznxKuyfMEHEm (c577d70 — branchLabel guard fix). Build 22s. Admin page confirmed working end-to-end.
 - **Bai hoc**: khi refactor ham utility them tham so, kiem tra tat ca callers — nhat la callers dung ham lam callback cho `.map()` / `.filter()` / `.sort()`. Array prototype methods truyen them arguments lam lech signature.
+
+### 2026-04-17 (late night) — Features 7 & 9: Kanban Board + Task Pin
+- **Yeu cau user**: "Ở phần nâng cấp này hãy nâng cấp phần 7 và phần 9" (nang cap phan 7 va 9 trong roadmap UI).
+- **Feature 7 — Kanban Board view**:
+  - New component `src/components/KanbanBoard.js`: 4 cot trang thai (Chua lam / Dang thuc hien / Cho phan hoi / Hoan thanh).
+  - HTML5 native drag-and-drop giua cac cot → doi `task.status` tu tren client, verify voi overdue modal (neu task tre han + keo sang done/waiting thi yeu cau chon ly do — reuse modal y het TaskList).
+  - Task card trong Kanban: title, description preview, priority chip, deadline, assignee avatars, sub-task count, file count.
+  - Toast xac nhan doi trang thai, push notify creator, log activity voi `source: 'kanban'` trong details.
+  - View toggle "Danh sach / Kanban" trong tab Dashboard, persist preference vao `localStorage` key `taskflow_view_mode`.
+  - Click card Kanban → chuyen ve List view + focus task (reuse `focusTaskId` state).
+- **Feature 9 — Task Pin (ghim)**:
+  - Migration moi `supabase-migration-2026-04-17b.sql`: `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned BOOLEAN DEFAULT false`. Index partial `WHERE pinned = true`.
+  - `togglePin` handler trong TaskList + KanbanBoard. Permission: `canPinTasks = isAdmin || isAccountant` (admin/director/accountant; member khong duoc ghim).
+  - Task ghim: 📌 emoji canh title + amber-500 left border 3px + amber-50 bg tint. Hien o ca List va Kanban view.
+  - Sort pinned truoc: trong `parentTasks.sort(...)` cua TaskList va trong `byStatus` groups cua KanbanBoard.
+  - Nut Ghim/Bo ghim: trong List view o header dong expanded (canh nut Xoa); trong Kanban o goc phai tren cua card (icon-only 📌/📍).
+- **Prop threading**: them `canPinTasks` prop xuyen suot Dashboard → TaskList → Row (vi `isAdmin` trong TaskList da bi overload thanh "admin view mode" = director||accountant, khong phan anh vai tro admin thuc).
+- **Files**: 2 new (`supabase-migration-2026-04-17b.sql`, `src/components/KanbanBoard.js`) + 2 modified (`src/components/TaskList.js`, `src/pages/dashboard.js`). Migration da apply tren Supabase taskflow project (dvoagdhbbppqpofzlkju) qua MCP.
+- **Verification**: tren `https://cce-tasks.vercel.app/dashboard`:
+  1. Toggle List/Kanban: click chuyen doi muot, state persist qua localStorage.
+  2. Kanban: 4 cot hien day du, 29 task done nam trong cot "Hoan thanh", task card co day du info.
+  3. Pin: click nut 📌 tren task card → toast "📌 Da ghim task" xuat hien, task nhan border amber + emoji 📌 canh title. Tab List hien thi dung nhu Kanban.
+  4. Unpin: click lai → toast "Da bo ghim", border va emoji bien mat. Khoi phuc trang thai goc.
+  5. Console: no errors. Build 23s.
+- **DEPLOYED**: dpl_J24PQtvdHvwXc7zG89StKn5dLbB2 (commit c18734a). Production alias `cce-tasks.vercel.app` da cap nhat.
+- **Safety**: migration idempotent (IF NOT EXISTS, DEFAULT false) — khong anh huong 29 task hien co, tat ca mac dinh `pinned = false`.
