@@ -607,22 +607,41 @@ function ReportsSection({ department, isDirector, currentUserId }) {
   const [dateTo, setDateTo] = useState('');
   const [loading, setLoading] = useState(true);
   const [ceoReportSending, setCeoReportSending] = useState(false);
+  const [telegramInfo, setTelegramInfo] = useState(null);
+  const [telegramChecking, setTelegramChecking] = useState(false);
 
   async function handleSendCEOReport(reportPeriod) {
     if (!isDirector) { toast('Chỉ Tổng giám đốc mới được gửi báo cáo CEO', 'error'); return; }
     if (!currentUserId) return;
-    if (!window.confirm(`Gửi báo cáo ${reportPeriod === 'month' ? 'tháng' : 'tuần'} ngay cho tất cả Tổng Giám đốc? (in-app + push + email nếu có)`)) return;
+    if (!window.confirm(`Gửi báo cáo ${reportPeriod === 'month' ? 'tháng' : 'tuần'} ngay cho tất cả Tổng Giám đốc? (in-app + push + email/Telegram nếu có)`)) return;
     setCeoReportSending(true);
     try {
       const res = await fetch(`/api/send-ceo-report?period=${reportPeriod}&requesterId=${currentUserId}`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) { toast('Lỗi: ' + (data.error || 'Không gửi được'), 'error'); return; }
       const count = (data.notifyResults || []).length;
-      toast(`✅ Đã gửi báo cáo ${reportPeriod === 'month' ? 'tháng' : 'tuần'} cho ${count} TGĐ`, 'success');
+      const tg = (data.telegramResults || []).filter(t => t.ok).length;
+      const tgTotal = (data.telegramResults || []).length;
+      toast(`✅ Đã gửi báo cáo ${reportPeriod === 'month' ? 'tháng' : 'tuần'}: ${count} TGĐ${tgTotal ? `, Telegram ${tg}/${tgTotal}` : ''}`, 'success');
     } catch (e) {
       toast('Lỗi mạng: ' + e.message, 'error');
     } finally {
       setCeoReportSending(false);
+    }
+  }
+
+  async function handleCheckTelegram() {
+    if (!currentUserId) return;
+    setTelegramChecking(true);
+    try {
+      const res = await fetch(`/api/telegram-check?requesterId=${currentUserId}`);
+      const data = await res.json();
+      setTelegramInfo(data);
+      if (!data.configured) toast('Bot Telegram chưa cấu hình. Xem hướng dẫn trong panel.', 'error');
+    } catch (e) {
+      toast('Lỗi: ' + e.message, 'error');
+    } finally {
+      setTelegramChecking(false);
     }
   }
 
@@ -829,6 +848,63 @@ function ReportsSection({ department, isDirector, currentUserId }) {
               Báo cáo tháng
             </button>
             <span className="text-[10px] text-amber-700 ml-auto">Tự động: Thứ 2 hàng tuần + ngày 1 hàng tháng</span>
+          </div>
+        )}
+
+        {/* Telegram bot setup (director only) */}
+        {isDirector && (
+          <div className="mt-2 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+            <div className="flex gap-2 flex-wrap items-center">
+              <span className="text-[11px] text-sky-900 font-medium">🤖 Telegram bot:</span>
+              <button onClick={handleCheckTelegram} disabled={telegramChecking}
+                className="text-[11px] px-2.5 py-1 rounded bg-white border border-sky-300 text-sky-900 hover:bg-sky-100 disabled:opacity-50">
+                {telegramChecking ? 'Đang kiểm tra...' : 'Kiểm tra trạng thái'}
+              </button>
+              {telegramInfo && telegramInfo.configured && telegramInfo.bot && (
+                <a href={telegramInfo.bot.link} target="_blank" rel="noopener noreferrer"
+                  className="text-[11px] px-2.5 py-1 rounded bg-white border border-sky-300 text-sky-700 hover:bg-sky-100">
+                  Mở @{telegramInfo.bot.username}
+                </a>
+              )}
+              {telegramInfo && (
+                <span className={`text-[10px] ml-auto ${telegramInfo.configured ? 'text-sky-700' : 'text-red-600'}`}>
+                  {telegramInfo.configured ? `${telegramInfo.chats?.length || 0} chat đang nhận` : 'Chưa cấu hình'}
+                </span>
+              )}
+            </div>
+            {telegramInfo && !telegramInfo.configured && (
+              <div className="mt-2 text-[10px] text-sky-800 space-y-0.5">
+                <div className="font-semibold">Hướng dẫn set up (3 phút):</div>
+                {(telegramInfo.setupSteps || []).map((s, i) => <div key={i}>{s}</div>)}
+              </div>
+            )}
+            {telegramInfo && telegramInfo.configured && telegramInfo.chats && telegramInfo.chats.length > 0 && (
+              <div className="mt-2 space-y-1">
+                <div className="text-[10px] font-semibold text-sky-800">Chat đang kết nối:</div>
+                {telegramInfo.chats.map(c => (
+                  <div key={c.id} className="text-[10px] text-sky-700 flex gap-2 items-center bg-white rounded px-2 py-1 border border-sky-100">
+                    <code className="font-mono">{c.id}</code>
+                    <span className="text-sky-500">·</span>
+                    <span>{c.type === 'private' ? `${c.firstName || ''} ${c.lastName || ''}`.trim() : c.title || '(không tên)'}</span>
+                    {c.username && <span className="text-sky-400">@{c.username}</span>}
+                  </div>
+                ))}
+                <div className="text-[10px] bg-white rounded px-2 py-1.5 border border-sky-200">
+                  <div className="font-semibold text-sky-800 mb-0.5">Chuỗi CSV để paste vào Vercel env <code className="font-mono">TELEGRAM_CHAT_IDS</code>:</div>
+                  <code className="font-mono text-sky-900 break-all">{telegramInfo.csv}</code>
+                </div>
+                {telegramInfo.currentEnv?.TELEGRAM_CHAT_IDS && telegramInfo.currentEnv.TELEGRAM_CHAT_IDS !== '(chua set)' && (
+                  <div className="text-[10px] text-sky-700">
+                    Env hiện tại: <code className="font-mono">{telegramInfo.currentEnv.TELEGRAM_CHAT_IDS}</code>
+                  </div>
+                )}
+              </div>
+            )}
+            {telegramInfo && telegramInfo.configured && telegramInfo.chats && telegramInfo.chats.length === 0 && (
+              <div className="mt-2 text-[10px] text-sky-800">
+                {telegramInfo.hint || 'Chưa có ai nhắn tin cho bot. Hãy nhờ CEO vào t.me/<bot> → bấm Start.'}
+              </div>
+            )}
           </div>
         )}
       </div>

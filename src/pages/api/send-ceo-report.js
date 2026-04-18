@@ -5,6 +5,7 @@
 //
 // Tac vu: tong hop KPI toan cong ty (ca 2 department) → notify tat ca director
 // + push web + (neu co RESEND_API_KEY thi send email)
+// + (neu co TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_IDS thi send Telegram bot)
 
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
@@ -211,6 +212,65 @@ async function sendEmailResend(to, subject, html) {
   }
 }
 
+// ═══════════ TELEGRAM BOT ═══════════
+// Env: TELEGRAM_BOT_TOKEN (from @BotFather) + TELEGRAM_CHAT_IDS (csv)
+// Chat IDs: user/group/channel IDs. Get via https://api.telegram.org/bot<TOKEN>/getUpdates
+// sau khi CEO da nhan tin hoac add bot vao group.
+async function sendTelegram(chatId, text) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return { skipped: true, reason: 'no_bot_token' };
+  if (!chatId) return { skipped: true, reason: 'no_chat_id' };
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      }),
+    });
+    const data = await r.json();
+    if (!data.ok) return { ok: false, error: data.description || 'telegram_failed' };
+    return { ok: true, messageId: data.result?.message_id };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+function formatReportTelegram(periodLabel, nail, hotel) {
+  const totalTasks = nail.totalTasks + hotel.totalTasks;
+  const totalDone = nail.done + hotel.done;
+  const totalCost = nail.cost + hotel.cost;
+  const totalRate = totalTasks > 0 ? Math.round(totalDone / totalTasks * 100) : 0;
+  const healthIcon = h => h >= 75 ? '✅' : h >= 50 ? '⚠️' : '🚨';
+  const ts = new Date().toLocaleString('vi-VN');
+
+  // Telegram HTML parse mode: <b>, <i>, <u>, <s>, <code>, <pre>, <a href>
+  return `<b>📊 BÁO CÁO ${periodLabel.toUpperCase()} — CCE Group</b>
+<i>${ts}</i>
+
+<b>🎨 NAIL (Coco Nail)</b>
+• Task: <b>${nail.done}/${nail.totalTasks}</b> (${nail.rate}%) ${trendArrow(nail.rate, nail.prevRate)}
+• Trễ hạn: <b>${nail.overdue}</b> task
+• Đề xuất: <b>${nail.approved}</b> duyệt / ${nail.pending} chờ
+• Chi phí: <b>${fmtMoney(nail.cost)}</b> ${trendArrow(nail.cost, nail.prevCost)}
+• Health: <b>${nail.health}/100</b> ${healthIcon(nail.health)}
+
+<b>🏨 HOTEL (Coco Ex)</b>
+• Task: <b>${hotel.done}/${hotel.totalTasks}</b> (${hotel.rate}%) ${trendArrow(hotel.rate, hotel.prevRate)}
+• Trễ hạn: <b>${hotel.overdue}</b> task
+• Đề xuất: <b>${hotel.approved}</b> duyệt / ${hotel.pending} chờ
+• Chi phí: <b>${fmtMoney(hotel.cost)}</b> ${trendArrow(hotel.cost, hotel.prevCost)}
+• Health: <b>${hotel.health}/100</b> ${healthIcon(hotel.health)}
+
+<b>🏢 TỔNG CÔNG TY</b>
+<b>${totalDone}/${totalTasks}</b> task (${totalRate}%) • <b>${fmtMoney(totalCost)}</b> chi phí
+
+<a href="https://cce-tasks.vercel.app/dashboard">Mở dashboard →</a>`;
+}
+
 export default async function handler(req, res) {
   // Vercel Cron mac dinh gui header `Authorization: Bearer <CRON_SECRET>` khi env var nay duoc set.
   // Cung chap nhan `x-api-key` header hoac `?key=` query de test tu CLI.
@@ -238,6 +298,7 @@ export default async function handler(req, res) {
     const periodLabel = period === 'month' ? 'Tháng' : 'Tuần';
     const message = formatReportMessage(periodLabel, nail, hotel);
     const html = formatReportHTML(periodLabel, nail, hotel);
+    const telegramMsg = formatReportTelegram(periodLabel, nail, hotel);
     const title = `📊 Báo cáo ${periodLabel.toLowerCase()} — CCE Group`;
 
     // Find all directors
@@ -263,6 +324,16 @@ export default async function handler(req, res) {
       notifyResults.push({ id: dir.id, name: dir.name, pushed, email });
     }
 
+    // Telegram: gui cho tat ca chat_id trong TELEGRAM_CHAT_IDS (csv).
+    // Co the la personal chat, group, hoac channel — tuy CEO dang ky.
+    const chatIds = (process.env.TELEGRAM_CHAT_IDS || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+    const telegramResults = [];
+    for (const chatId of chatIds) {
+      const result = await sendTelegram(chatId, telegramMsg);
+      telegramResults.push({ chatId, ...result });
+    }
+
     return res.status(200).json({
       success: true, period, periodLabel,
       nail, hotel,
@@ -270,6 +341,7 @@ export default async function handler(req, res) {
       totalDone: nail.done + hotel.done,
       totalCost: nail.cost + hotel.cost,
       notifyResults,
+      telegramResults,
       sentAt: new Date().toISOString(),
     });
   } catch (e) {
