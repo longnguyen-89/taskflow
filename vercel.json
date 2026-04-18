@@ -1,1 +1,1 @@
-{"crons":[{"path":"/api/check-deadlines","schedule":"0 0 * * *"},{"path":"/api/generate-recurring","schedule":"0 23 * * *"}]}
+{"crons":[{"path":"/api/check-deadlines","schedule":"0 0 * * *"},{"path":"/api/generate-recurring","schedule":"0 23 * * *"},{"path":"/api/send-ceo-report?period=week","schedule":"0 1 * * 1"},{"path":"/api/send-ceo-report?period=month","schedule":"0 1 1 * *"}]}

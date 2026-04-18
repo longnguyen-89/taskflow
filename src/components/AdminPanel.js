@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
 import { ACTION_LABELS, ACTION_ICONS } from '@/lib/activityLog';
 import PriceHistorySection from '@/components/PriceHistory';
+import { BranchCompareSection, TrendChartSection, WorkHeatmapSection } from '@/components/Analytics';
 
 const POSITIONS = ['Quản lý', 'Kỹ thuật viên', 'Lễ tân', 'Kế toán', 'Buồng phòng', 'Bảo vệ'];
 const ROLES = [
@@ -24,6 +25,9 @@ const MENU = [
   { id: 'activity', label: 'Lịch sử', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
   { id: 'price_history', label: 'Lịch sử giá', icon: 'M3 3v18h18M7 14l4-4 4 4 5-5' },
   { id: 'reports', label: 'Báo cáo', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+  { id: 'branch_compare', label: 'So sánh CN', icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4' },
+  { id: 'trend', label: 'Xu hướng', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
+  { id: 'heatmap', label: 'Heatmap giờ', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
   { id: 'appearance', label: 'Giao diện', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01' },
 ];
 
@@ -55,7 +59,10 @@ export default function AdminPanel({ members, department, onRefresh, dynamicBran
       {section === 'categories' && <CategoriesSection />}
       {section === 'activity' && <ActivityLogSection department={department} />}
       {section === 'price_history' && <PriceHistorySection department={department} />}
-      {section === 'reports' && <ReportsSection department={department} />}
+      {section === 'reports' && <ReportsSection department={department} isDirector={isDirector} currentUserId={currentAuthUser?.id} />}
+      {section === 'branch_compare' && <BranchCompareSection department={department} dynamicBranches={dynamicBranches} />}
+      {section === 'trend' && <TrendChartSection department={department} />}
+      {section === 'heatmap' && <WorkHeatmapSection department={department} />}
       {section === 'appearance' && <AppearanceSection />}
     </div>
   );
@@ -588,7 +595,7 @@ function PermissionsSection() {
   );
 }
 
-function ReportsSection({ department }) {
+function ReportsSection({ department, isDirector, currentUserId }) {
   const [proposals, setProposals] = useState([]);
   const [prevProposals, setPrevProposals] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -599,6 +606,25 @@ function ReportsSection({ department }) {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [loading, setLoading] = useState(true);
+  const [ceoReportSending, setCeoReportSending] = useState(false);
+
+  async function handleSendCEOReport(reportPeriod) {
+    if (!isDirector) { toast('Chỉ Tổng giám đốc mới được gửi báo cáo CEO', 'error'); return; }
+    if (!currentUserId) return;
+    if (!window.confirm(`Gửi báo cáo ${reportPeriod === 'month' ? 'tháng' : 'tuần'} ngay cho tất cả Tổng Giám đốc? (in-app + push + email nếu có)`)) return;
+    setCeoReportSending(true);
+    try {
+      const res = await fetch(`/api/send-ceo-report?period=${reportPeriod}&requesterId=${currentUserId}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { toast('Lỗi: ' + (data.error || 'Không gửi được'), 'error'); return; }
+      const count = (data.notifyResults || []).length;
+      toast(`✅ Đã gửi báo cáo ${reportPeriod === 'month' ? 'tháng' : 'tuần'} cho ${count} TGĐ`, 'success');
+    } catch (e) {
+      toast('Lỗi mạng: ' + e.message, 'error');
+    } finally {
+      setCeoReportSending(false);
+    }
+  }
 
   useEffect(() => { fetchReport(); }, [department, period, dateFrom, dateTo]);
 
@@ -789,6 +815,22 @@ function ReportsSection({ department }) {
           <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateTo} onChange={e => setDateTo(e.target.value)} />
           {(dateFrom || dateTo) && <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-xs text-red-500 hover:underline">Xóa</button>}
         </div>
+
+        {/* CEO Report actions (director only) */}
+        {isDirector && (
+          <div className="mt-3 flex gap-2 flex-wrap items-center bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <span className="text-[11px] text-amber-900 font-medium">📬 Gửi báo cáo CEO ngay:</span>
+            <button onClick={() => handleSendCEOReport('week')} disabled={ceoReportSending}
+              className="text-[11px] px-2.5 py-1 rounded bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 disabled:opacity-50">
+              {ceoReportSending ? 'Đang gửi...' : 'Báo cáo tuần'}
+            </button>
+            <button onClick={() => handleSendCEOReport('month')} disabled={ceoReportSending}
+              className="text-[11px] px-2.5 py-1 rounded bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 disabled:opacity-50">
+              Báo cáo tháng
+            </button>
+            <span className="text-[10px] text-amber-700 ml-auto">Tự động: Thứ 2 hàng tuần + ngày 1 hàng tháng</span>
+          </div>
+        )}
       </div>
 
       {/* ══════════ SECTION 1: HEALTH SCORE + KPI CARDS ══════════ */}
