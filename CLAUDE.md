@@ -236,3 +236,50 @@ profiles, tasks, task_assignees, task_watchers, task_files, task_groups, task_ch
 - **Prop threading**: `assignMentionedUser`, `members`, `toggleReaction` them vao Row props + 3 Row call sites (2 trong view thong thuong, 1 trong view groupByAssignee).
 - **DEPLOYED**: commit a2689ab, deployment dpl_H6qgrMnDh5d2qn9phDcMoEHpcXWs. Migration `comment_reactions_feature_12` da apply tren Supabase taskflow project (dvoagdhbbppqpofzlkju).
 - **Safety**: migration idempotent, khong anh huong 61 comment hien co. PriceHistory chi doc proposals + items — khong sua du lieu. Smart @mention chi dung quyen san co (check assignee trung, check permission). Reactions FK CASCADE → khi xoa comment thi xoa luon reactions.
+
+### 2026-04-18 — Features 20, 21, 22, 23: CEO Analytics Suite
+- **Yeu cau user**: 4 feature cho TGD/CEO — (20) bao cao tu dong cuoi tuan/thang, (21) so sanh chi nhanh, (22) bieu do xu huong theo thoi gian, (23) heatmap gio lam viec. Kem cau hoi "bao cao o muc 20 co gui qua zalo dc ko?".
+- **Tra loi Zalo**: Co 3 cach — Zalo OA + ZNS (gui tin SMS-like qua so phone, can duyet mau 1-3 ngay, ~300-500d/tin, phai la DN), Zalo OA message (mien phi nhung user phai bam Quan Tam OA), webhook Zalo group (khong co API chinh thuc). Truoc mat trien khai: in-app notification + push + email (qua Resend neu co key). Sau se them Zalo ZNS khi khach dang ky OA.
+- **Feature 20 — Auto CEO Report**:
+  - New endpoint `src/pages/api/send-ceo-report.js`. Method: GET (cron) hoac POST (manual).
+  - Params: `?period=week` (7 ngay qua) hoac `?period=month` (tu dau thang). Default `week`.
+  - Auth: Vercel Cron gui header `Authorization: Bearer <CRON_SECRET>` → check; hoac `x-api-key` / `?key=`; hoac `?requesterId=` + DB check role=director.
+  - Compute KPI cho ca 2 department (nail + hotel): totalTasks, done, rate, overdue, approved, pending, cost, health score, onTimeRate + so sanh voi ky truoc (trendArrow).
+  - Send: notify (`notifications` insert) + push (`sendPushToUser`) + email (Resend API neu co `RESEND_API_KEY` env, else skipped) cho tat ca director. HTML email co style inline.
+  - Updated `vercel.json` them 2 cron: weekly `0 1 * * 1` (Thu 2 8am VN) va monthly `0 1 1 * *` (ngay 1 8am VN).
+  - Manual trigger: button trong `ReportsSection` (banner amber phia tren) — "Báo cáo tuần" + "Báo cáo tháng". Fetch POST `/api/send-ceo-report?period=week&requesterId=<uid>`.
+- **Feature 21 — BranchCompareSection** (`src/components/Analytics.js`):
+  - Chi dung cho `department === 'nail'` (Hotel khong chia CN).
+  - User chon 2-4 chi nhanh (checkbox pill row), mac dinh 4 CN dau tien.
+  - Period: week / month / quarter / year.
+  - Fetch tasks + proposals + profiles, group by `branch`. Render card grid (1-4 cot) voi: task done/total + progress bar, overdue, approved/pending de xuat, chi phi, so nhan su.
+  - Auto highlight: CN co `rate` cao nhat = border xanh + badge "🏆 Tot nhat"; CN thap nhat (neu >= 2 CN) = border hong + badge "⚠ Yeu".
+- **Feature 22 — TrendChartSection**:
+  - Toggle: week (moi tuan 7 ngay) vs month (moi thang). Chu ky: 6/8/12.
+  - Tinh buckets: [{label, total, done, overdue, rate}] cho N ky gan nhat.
+  - SVG 720×220: bars = so task tao (xanh nhat), line = ty le hoan thanh % (xanh dam), Y-axis 0-100%, X-axis labels theo bucket.
+  - Summary cards: Latest rate, delta vs ky dau, tong task trong khung.
+- **Feature 23 — WorkHeatmapSection**:
+  - Range: 7 / 30 / 90 ngay. Fetch tasks `status=done` + `completed_at IS NOT NULL`.
+  - Matrix 7 (T2-CN) × 24 (0h-23h). Color scale: 5 steps tu #f9fafb -> #065f46.
+  - Insights: tong task hoan thanh, ngay nang suat nhat, gio nang suat nhat.
+  - Cell hover title: "Thu X H:00 — N task".
+- **AdminPanel integration**: Them 3 menu item moi — "So sanh CN" (branch compare), "Xu huong" (trend), "Heatmap gio". ReportsSection them prop `isDirector` + `currentUserId` va "Gui bao cao CEO ngay" banner.
+- **Build**: `next build` sach, dashboard 59.3 kB (tang ~7kB do SVG chart + heatmap).
+- **Files**: 2 new (`api/send-ceo-report.js` ~280 dong, `components/Analytics.js` ~370 dong), 2 modified (`AdminPanel.js` them import + 3 menu + 3 section render + ReportsSection banner; `vercel.json` them 2 cron).
+- **DEPLOYED**: commit 936c6d1, deployment dpl_7TFPBa8i2gucVTBmiME6wS5PP2yk.
+- **TODO sau**: (a) setup Zalo OA + ZNS template neu muon gui qua Zalo, (b) setup `RESEND_API_KEY` + `RESEND_FROM` trong Vercel env neu muon gui email, (c) CRON_SECRET phai set de cron work.
+
+### 2026-04-18 (late) — 4 Plan features verification + app_settings migration
+- **Yeu cau user**: Plan mode — 4 feature upgrade: (1) Activity Log, (2) Permissions (TGD cau hinh), (3) Branch Management (CRUD CN), (4) Password Change (TGD reset + user tu doi).
+- **Phat hien**: Tat ca 4 feature DA implement tu cac session truoc:
+  - **Activity Log**: `src/lib/activityLog.js` (logActivity + ACTIONS/ACTION_LABELS/ACTION_ICONS). Tich hop trong CreateTask, TaskList, Proposals, KanbanBoard. `ActivityLogSection` trong AdminPanel (menu "Lich su"). `activity_log` table da co 16 rows (dang chay thuc).
+  - **Permissions**: `AuthContext.js` co DEFAULT_PERMISSIONS + load tu `app_settings` key='permissions' + expose canCreateTask/canDeleteTask/canDeleteProposal/canApproveProposal/canManageUsers/canViewReports. `PermissionsSection` trong AdminPanel (menu "Phan quyen") voi 6 toggle.
+  - **Branch Management**: `lib/branches.js` co `loadBranches(supabase)` + fallback NAIL_BRANCHES. `dashboard.js` load dynamic branches va pass `dynamicBranches` prop. `BranchesSection` trong AdminPanel (menu "Chi nhanh") — CRUD + toggle active. `branches` table da co 4 rows.
+  - **Password Change**: `api/change-password.js` (verify old pwd via signInWithPassword) + `api/reset-password.js` (verify requester=director). AuthContext expose `changePassword(email, old, new)` + `resetPassword(userId, new)`. Dashboard co pw modal (click avatar → "Doi mat khau"). AdminPanel UsersSection co nut "Reset MK" per user.
+- **Gap duy nhat**: `app_settings` table ton tai nhung khong co migration file document — da seed `permissions` key truoc day thu cong. 
+- **Fix**: Tao `supabase-migration-2026-04-18.sql` document cau truc `app_settings` table + seed default permissions row (idempotent). Da apply migration `seed_app_settings_permissions_2026_04_18` tren Supabase taskflow project — row `permissions` seeded voi 6 key: member_create_task/admin_delete_tasks/admin_delete_proposals/admin_approve_proposals/admin_manage_users=false, member_view_reports=true.
+- **Build**: `next build` sach (dashboard 59.3 kB, khong thay doi).
+- **Files**: 1 new (`supabase-migration-2026-04-18.sql` — document table + seed).
+- **DEPLOYED**: migration applied only (khong can redeploy — code khong thay doi).
+- **Safety**: Migration chay `CREATE TABLE IF NOT EXISTS` + `ON CONFLICT DO NOTHING` — khong anh huong 1 row `appearance` hien co.
