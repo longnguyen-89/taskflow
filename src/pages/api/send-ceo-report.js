@@ -301,6 +301,27 @@ export default async function handler(req, res) {
     const telegramMsg = formatReportTelegram(periodLabel, nail, hotel);
     const title = `📊 Báo cáo ${periodLabel.toLowerCase()} — CCE Group`;
 
+    // Short summary cho in-app card (1 dong)
+    const totalTasks_ = nail.totalTasks + hotel.totalTasks;
+    const totalDone_ = nail.done + hotel.done;
+    const totalRate_ = totalTasks_ > 0 ? Math.round(totalDone_ / totalTasks_ * 100) : 0;
+    const totalCost_ = nail.cost + hotel.cost;
+    const shortMessage = `${totalDone_}/${totalTasks_} task (${totalRate_}%) • ${fmtMoney(totalCost_)} chi phí • Click xem chi tiết`;
+
+    // Structured data cho notification card render
+    const reportData = {
+      version: 1,
+      period, periodLabel,
+      generatedAt: new Date().toISOString(),
+      nail, hotel,
+      totals: {
+        tasks: totalTasks_,
+        done: totalDone_,
+        rate: totalRate_,
+        cost: totalCost_,
+      },
+    };
+
     // Find all directors
     const { data: directors } = await supabase
       .from('profiles')
@@ -309,10 +330,11 @@ export default async function handler(req, res) {
 
     const notifyResults = [];
     for (const dir of (directors || [])) {
-      // In-app notification (with full markdown-ish message)
+      // In-app notification — type 'ceo_report' + structured data for rich card render
       await supabase.from('notifications').insert({
-        user_id: dir.id, type: 'info',
-        title, message,
+        user_id: dir.id, type: 'ceo_report',
+        title, message: shortMessage,
+        data: reportData,
       });
       // Push
       const pushed = await sendPushToUser(dir.id, title, `${nail.done + hotel.done} task xong, ${fmtMoney(nail.cost + hotel.cost)} chi phí`);
