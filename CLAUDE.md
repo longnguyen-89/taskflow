@@ -297,3 +297,30 @@ profiles, tasks, task_assignees, task_watchers, task_files, task_groups, task_ch
 - **Sidebar cleanup**: xoa 2 dong "{dept} · {N} chi nhánh" o subtitle sidebar (user yeu cau).
 - **Build**: `next build` sach. Dashboard bundle 61.6 kB (tang ~2kB tu 59.3 kB).
 - **Files**: 1 modified (`src/pages/dashboard.js`).
+
+### 2026-04-22 (p.m.) — Greeting personalization + Performance tab redesign
+- **Yeu cau user #1**: "chữ chào giám đốc này là ai cũng có hay là nó sẽ lấy theo tên của người dùng? hãy lấy theo tên của người dùng. Ví dụ người dùng tên Nguyễn Ngọc Phương thì sẽ tự động là Chào Nguyễn Ngọc Phương".
+- **Fix greeting**: `dashboard.js` executive header — thay logic "role-based greeting" (Giam doc/Ke toan/Quan ly/firstName) bang `const roleGreeting = profile?.name || 'bạn';` → luon hien ten day du cua user.
+- **DEPLOYED #1**: commit 725880d, dpl_2478baMbLunSNkN7TGPUHBc2eosy.
+
+- **Yeu cau user #2**: "chõ phần đánh giá này. có giao diện nào nhìn đẹp hơn không? hãy nghiên cứu và thiết kế lại để nhìn trực quan hơn và gọn hơn" (kem anh tab Danh gia hien tai).
+- **Nghien cuu**: doc design reference `design-tasks-flow/project/components/proposals_perf_analytics.jsx` → table-based layout voi rank medal, avatar, score mono, grade pill, progress bar, onTime %, sparkline SVG, overdue pill.
+- **Thay doi Performance.js** (rewrite hoan toan ~370 dong):
+  - **Header**: title "Đánh giá hiệu suất" + subtitle dem N nhan su trong ky. Row phai co 4 pill period (Tuần/Tháng/Quý/Năm) — active = bg accent-soft + border accent + color accent, con lai card bg. Custom range: 2 input date + nut "Bỏ chọn".
+  - **Summary strip** (4 cards): (1) Nhan su danh gia = count, (2) Diem trung binh = avg score mau theo threshold (>=70 accent / >=50 warn / else danger), (3) Da hoan thanh + dong phu "N tre han" (mau danger), (4) Top performer = avatar + ten + grade badge + score mono.
+  - **Table card** grid-template-columns: `44px 1fr 60px 56px 1fr 72px 108px 60px 28px`. Columns:
+    - `#` (medal 🥇🥈🥉 cho top 3, `#N` mono cho con lai, 15px font)
+    - `Nhan su` (Avatar 30px + name 13px bold + position 11px muted)
+    - `Diem` (18px mono, mau theo grade tone)
+    - `Hang` (pill bg gradeBg + color gradeColor: A+>=85, A>=70, B>=60, C>=50, D<50)
+    - `Hoan thanh` (thin progress bar 100px height 3px + "done/total" mono)
+    - `Dung han` (% mau theo threshold >=80 accent / >=60 warn / else danger)
+    - `Xu huong` (Sparkline SVG 104×24, polyline + dot cuoi, stroke theo tone)
+    - `Tre` (pill danger "Ndays" hoac dash)
+    - chevron rotate 180 khi expanded
+  - **Mobile responsive**: 1 row compact, avatar + name/position ben trai, score 20px mono + grade pill ben phai. Click vẫn expand.
+  - **Expandable**: click row → hien 4 extra KPI nho (Dang lam / Cho phan hoi / Ti le xong % / TB xong ngay/task) + khoi AI feedback left-border 3px tone = grade tone + text muted ink2.
+  - **Sparkline component** (bottom of file): 8 buckets chia deu ky, rate per bucket (done/total). Polyline + dot cuoi cung highlight.
+  - **CSS variables**: dung --accent, --warn, --danger, --ink, --ink2, --muted, --bg-soft, --line, --card-bg, --gradeBg (a/b/c/d), --gradeColor (a/b/c/d).
+- **Build**: `next build` sach. Dashboard bundle 61.6 kB (khong doi — Performance.js chunk rieng).
+- **Files**: 1 modified (`src/components/Performance.js` +266/-102 dong).
