@@ -420,8 +420,7 @@ export default function Dashboard() {
     .sort((a, b) => b.rate - a.rate || b.done - a.done)
     .slice(0, 4);
 
-  const firstName = (profile?.name || '').split(' ').slice(-1)[0] || profile?.name || '';
-  const roleGreeting = isDirector ? 'Giám đốc' : isAccountant ? 'Kế toán' : profile?.role === 'admin' ? 'Quản lý' : firstName;
+  const roleGreeting = profile?.name || 'bạn';
   const todayLabel = (() => {
     const wk = ['Chủ nhật','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'];
     const d = new Date();
