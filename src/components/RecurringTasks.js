@@ -184,13 +184,16 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   const ini = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3 animate-fade-in">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-base font-bold">Task lặp lại định kỳ</h2>
-          <p className="text-[11px] text-gray-500">Hệ thống sẽ tự sinh task vào sáng theo lịch — nhân viên không cần đợi anh giao thủ công.</p>
+          <h2 className="text-[22px] font-semibold text-ink" style={{ letterSpacing: '-.015em' }}>Task lặp lại định kỳ</h2>
+          <p className="text-sm text-ink-3 mt-1">Hệ thống tự sinh task theo lịch — nhân viên không cần đợi anh giao thủ công.</p>
         </div>
-        <button onClick={() => { resetForm(); setShowForm(true); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#123524' }}>+ Tạo template</button>
+        <button onClick={() => { resetForm(); setShowForm(true); }} className="btn-primary text-xs flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+          Tạo template
+        </button>
       </div>
 
       {showForm && (
@@ -360,27 +363,32 @@ export default function RecurringTasks({ members, department, userId, taskGroups
       )}
 
       {loading ? (
-        <div className="card p-6 text-center text-sm text-gray-400">Đang tải...</div>
+        <div className="card p-6 text-center text-sm text-muted-ink font-mono">Đang tải...</div>
       ) : list.length === 0 ? (
-        <div className="card p-6 text-center text-sm text-gray-400">Chưa có template nào. Bấm "+ Tạo template" để bắt đầu.</div>
+        <div className="card p-10 text-center">
+          <div className="text-3xl mb-2">🔁</div>
+          <div className="text-sm text-ink-3">Chưa có template nào. Bấm &quot;+ Tạo template&quot; để bắt đầu.</div>
+        </div>
       ) : (
         <div className="space-y-2">
           {list.map(r => (
-            <div key={r.id} className={`card p-3 ${!r.active ? 'opacity-50' : ''}`}>
+            <div key={r.id} className="card p-4 transition-all" style={{ opacity: !r.active ? 0.6 : 1 }}>
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="text-sm font-semibold">{r.title}</h4>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold text-white" style={{ background: '#123524' }}>{FREQ[r.frequency]}</span>
-                    {!r.active && <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-semibold">TẠM DỪNG</span>}
+                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                    <h4 className="text-sm font-semibold text-ink" style={{ letterSpacing: '-.005em' }}>{r.title}</h4>
+                    <span className="pill" style={{ background: 'var(--ink)', color: '#F5E7C3', fontSize: 10 }}>{FREQ[r.frequency]}</span>
+                    {!r.active && <span className="pill pill-ghost" style={{ fontSize: 10 }}>TẠM DỪNG</span>}
                   </div>
-                  <p className="text-[11px] text-gray-500 mt-0.5">{describeSchedule(r)}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{(r.assignee_ids || []).length} người làm · {(r.watcher_ids || []).length} theo dõi · {(r.default_checklist || []).length} bước · {(Array.isArray(r.default_files) ? r.default_files.length : 0)} file · sinh lần cuối: {r.last_generated_date || 'chưa'}</p>
+                  <p className="text-xs text-ink-3">{describeSchedule(r)}</p>
+                  <p className="text-[11px] font-mono mt-1" style={{ color: 'var(--muted)' }}>
+                    {(r.assignee_ids || []).length} người · {(r.watcher_ids || []).length} theo dõi · {(r.default_checklist || []).length} bước · {(Array.isArray(r.default_files) ? r.default_files.length : 0)} file · cuối: {r.last_generated_date || 'chưa'}
+                  </p>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <button onClick={() => openEdit(r)} className="text-[10px] px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100">Sửa</button>
-                  <button onClick={() => toggleActive(r)} className="text-[10px] px-2 py-1 rounded bg-yellow-50 text-yellow-700 font-semibold hover:bg-yellow-100">{r.active ? 'Tạm dừng' : 'Bật lại'}</button>
-                  <button onClick={() => remove(r)} className="text-[10px] px-2 py-1 rounded bg-red-50 text-red-700 font-semibold hover:bg-red-100">Xóa</button>
+                <div className="flex flex-col gap-1 flex-shrink-0">
+                  <button onClick={() => openEdit(r)} className="pill" style={{ background: 'var(--violet-soft)', color: 'var(--violet)', fontSize: 10, fontWeight: 600 }}>Sửa</button>
+                  <button onClick={() => toggleActive(r)} className="pill" style={{ background: 'var(--warn-soft)', color: 'var(--warn)', fontSize: 10, fontWeight: 600 }}>{r.active ? 'Tạm dừng' : 'Bật lại'}</button>
+                  <button onClick={() => remove(r)} className="pill" style={{ background: 'var(--danger-soft)', color: 'var(--danger)', fontSize: 10, fontWeight: 600 }}>Xoá</button>
                 </div>
               </div>
             </div>

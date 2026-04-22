@@ -37,19 +37,31 @@ export default function AdminPanel({ members, department, onRefresh, dynamicBran
 
   return (
     <div className="animate-fade-in">
-      <h2 className="font-display font-bold text-lg mb-4" style={{ color: '#123524' }}>Quản trị hệ thống</h2>
+      <div className="mb-5">
+        <h2 className="text-[22px] font-semibold text-ink" style={{ letterSpacing: '-.015em' }}>Quản trị hệ thống</h2>
+        <p className="text-sm text-ink-3 mt-1">Cấu hình tài khoản, phân quyền, chi nhánh, báo cáo và giao diện.</p>
+      </div>
 
       {/* Sub-menu */}
-      <div className="flex gap-2 mb-5 flex-wrap">
-        {MENU.map(m => (
-          <button key={m.id} onClick={() => setSection(m.id)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-medium border transition-all ${
-              section === m.id ? 'bg-white shadow-sm border-gray-200 text-gray-900' : 'border-transparent text-gray-500 hover:bg-white/50'
-            }`}>
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d={m.icon} /></svg>
-            {m.label}
-          </button>
-        ))}
+      <div className="flex gap-1.5 mb-5 flex-wrap">
+        {MENU.map(m => {
+          const on = section === m.id;
+          return (
+            <button
+              key={m.id}
+              onClick={() => setSection(m.id)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all"
+              style={on
+                ? { background: 'var(--ink)', color: '#F5E7C3', border: '1px solid var(--ink)' }
+                : { background: '#fff', color: 'var(--muted)', border: '1px solid var(--line)' }}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d={m.icon} />
+              </svg>
+              {m.label}
+            </button>
+          );
+        })}
       </div>
 
       {section === 'users' && <UsersSection members={members} department={department} createUser={createUser} onRefresh={onRefresh} isDirector={isDirector} currentUserId={currentAuthUser?.id} resetPassword={resetPassword} />}

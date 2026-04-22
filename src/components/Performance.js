@@ -14,10 +14,6 @@ export default function Performance({ tasks, members, department, userId, profil
     else if (period === 'quarter') { start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1); }
     else { start = new Date(now.getFullYear(), 0, 1); }
 
-    // Phân trang KPI theo chi nhánh.
-    // - TGĐ: toàn bộ nhân viên (theo dept, trừ chính TGĐ).
-    // - Admin: chỉ nhân viên thuộc chi nhánh mình phụ trách + chính mình.
-    // - Member: chỉ bản thân.
     const selfBranches = Array.isArray(profile?.branches) ? profile.branches : [];
     const targetMembers = isDirector
       ? members.filter(m => m.role !== 'director' && m.department === department)
@@ -45,92 +41,139 @@ export default function Performance({ tasks, members, department, userId, profil
       const avg = done.length > 0 ? done.reduce((s, t) => s + (new Date(t.completed_at || t.updated_at) - new Date(t.created_at)) / 86400000, 0) / done.length : 0;
       const score = cr * 0.4 + otr * 0.4 + Math.max(0, 100 - avg * 10) * 0.2;
 
-      let grade, gc;
-      if (score >= 85) { grade = 'A+'; gc = '#16a34a'; }
-      else if (score >= 70) { grade = 'B+'; gc = '#2563eb'; }
-      else if (score >= 50) { grade = 'C'; gc = '#d97706'; }
-      else { grade = 'D'; gc = '#dc2626'; }
+      let grade, gradeColor, gradeBg;
+      if (score >= 85) { grade = 'A+'; gradeColor = 'var(--accent)'; gradeBg = 'var(--accent-soft)'; }
+      else if (score >= 70) { grade = 'B+'; gradeColor = 'var(--violet)'; gradeBg = 'var(--violet-soft)'; }
+      else if (score >= 50) { grade = 'C';  gradeColor = 'var(--warn)';   gradeBg = 'var(--warn-soft)'; }
+      else                 { grade = 'D';  gradeColor = 'var(--danger)'; gradeBg = 'var(--danger-soft)'; }
 
-      // AI motivational feedback
       let feedback = '';
       if (cr >= 90 && otr >= 90) feedback = 'Xuất sắc! Tỷ lệ hoàn thành và đúng hạn rất cao. Hãy duy trì phong độ này!';
       else if (cr >= 70) feedback = 'Khá tốt. Cố gắng hoàn thành thêm các task còn lại và chú ý deadline.';
       else if (cr >= 50) feedback = 'Cần cải thiện tốc độ hoàn thành. Hãy ưu tiên task có deadline gần nhất trước.';
       else if (mt.length > 0) feedback = 'Cần trao đổi trực tiếp. Nhiều task chưa hoàn thành, có thể cần hỗ trợ hoặc điều chỉnh khối lượng công việc.';
       else feedback = 'Chưa có task nào trong kỳ đánh giá này.';
+      if (overdue.length > 0) feedback += ` ${overdue.length} task đang trễ hạn.`;
 
-      if (overdue.length > 0) feedback += ` ⚠ ${overdue.length} task đang trễ hạn.`;
-
-      return { member, total: mt.length, done: done.length, doing: doing.length, waiting: waiting.length, overdue: overdue.length, cr, otr, avg: avg.toFixed(1), score: Math.round(score), grade, gc, feedback };
+      return { member, total: mt.length, done: done.length, doing: doing.length, waiting: waiting.length, overdue: overdue.length, cr, otr, avg: avg.toFixed(1), score: Math.round(score), grade, gradeColor, gradeBg, feedback };
     }).sort((a, b) => b.score - a.score);
   }, [tasks, members, period, department, userId, profile, isAdmin, isDirector, dateFrom, dateTo]);
 
   const ini = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+  const PERIODS = { week: 'Tuần', month: 'Tháng', quarter: 'Quý', year: 'Năm' };
 
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display font-bold text-lg" style={{ color: '#123524' }}>Đánh giá hiệu quả</h2>
+      <div className="mb-5">
+        <h2 className="text-[22px] font-semibold text-ink" style={{ letterSpacing: '-.015em' }}>Hiệu suất</h2>
+        <p className="text-sm text-ink-3 mt-1">Bảng xếp hạng nhân viên theo tỉ lệ hoàn thành + đúng hạn.</p>
       </div>
 
       {/* Filters */}
       <div className="flex gap-2 mb-5 flex-wrap items-center">
-        {['week', 'month', 'quarter', 'year'].map(p => (
-          <button key={p} onClick={() => { setPeriod(p); setDateFrom(''); setDateTo(''); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${period === p && !dateFrom ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`}
-            style={period === p && !dateFrom ? { background: '#123524' } : {}}>
-            {p === 'week' ? 'Tuần' : p === 'month' ? 'Tháng' : p === 'quarter' ? 'Quý' : 'Năm'}
-          </button>
-        ))}
-        <span className="text-xs text-gray-400 ml-2">hoặc</span>
+        <div className="flex p-0.5 rounded-lg" style={{ background: 'var(--bg-soft)', border: '1px solid var(--line)' }}>
+          {Object.entries(PERIODS).map(([p, l]) => (
+            <button
+              key={p}
+              onClick={() => { setPeriod(p); setDateFrom(''); setDateTo(''); }}
+              className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all"
+              style={{
+                background: period === p && !dateFrom ? '#fff' : 'transparent',
+                color: period === p && !dateFrom ? 'var(--ink)' : 'var(--muted)',
+                boxShadow: period === p && !dateFrom ? '0 1px 2px rgba(18,53,36,.05)' : 'none',
+              }}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs font-mono text-muted-ink ml-1">hoặc</span>
         <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-        <span className="text-xs text-gray-400">→</span>
+        <span className="text-xs text-muted-ink">→</span>
         <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateTo} onChange={e => setDateTo(e.target.value)} />
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {evaluations.map((ev, i) => (
-          <div key={ev.member.id} className="card p-5">
+          <div key={ev.member.id} className="card p-4">
             <div className="flex items-center gap-3 mb-4">
-              {isDirector && <span className="text-base font-bold text-gray-300 w-6">#{i + 1}</span>}
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold" style={{ background: ev.member.avatar_color, color: '#333' }}>{ini(ev.member.name)}</div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold">{ev.member.name}</p>
-                <p className="text-[10px] text-gray-400">{ev.member.position} · {ev.member.department === 'hotel' ? 'Hotel' : 'Nail'}</p>
+              {isDirector && (
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center font-mono text-sm font-bold flex-shrink-0" style={{
+                  background: i === 0 ? 'var(--gold-soft)' : i < 3 ? 'var(--bg-soft)' : 'transparent',
+                  color: i === 0 ? 'var(--gold)' : 'var(--muted)',
+                  border: '1px solid var(--line)',
+                }}>
+                  #{i + 1}
+                </div>
+              )}
+              <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ background: ev.member.avatar_color, color: '#333' }}>
+                {ini(ev.member.name)}
               </div>
-              <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold" style={{ background: ev.gc + '15', color: ev.gc }}>{ev.grade}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-ink truncate" style={{ letterSpacing: '-.005em' }}>{ev.member.name}</p>
+                <p className="text-[11px] font-mono text-muted-ink">
+                  {ev.member.position || '—'} · {ev.member.department === 'hotel' ? 'Hotel' : 'Nail'} · điểm {ev.score}
+                </p>
+              </div>
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold font-mono" style={{
+                background: ev.gradeBg,
+                color: ev.gradeColor,
+                letterSpacing: '-.02em',
+              }}>
+                {ev.grade}
+              </div>
             </div>
 
-            {/* Detailed stats */}
+            {/* KPI grid */}
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
               {[
-                { v: ev.total, l: 'Tổng task' },
-                { v: ev.done, l: 'Hoàn thành', c: '#16a34a' },
-                { v: ev.doing, l: 'Đang làm', c: '#2563eb' },
-                { v: ev.waiting, l: 'Chờ phản hồi', c: '#d97706' },
-                { v: `${ev.cr}%`, l: 'Tỷ lệ xong', c: ev.cr >= 70 ? '#16a34a' : '#dc2626' },
-                { v: `${ev.avg}d`, l: 'TB xong' },
+                { v: ev.total,       l: 'Tổng',         color: 'var(--ink)' },
+                { v: ev.done,        l: 'Hoàn thành',   color: 'var(--accent)' },
+                { v: ev.doing,       l: 'Đang làm',     color: 'var(--violet)' },
+                { v: ev.waiting,     l: 'Chờ',          color: 'var(--warn)' },
+                { v: `${ev.cr}%`,    l: 'Tỉ lệ xong',   color: ev.cr >= 70 ? 'var(--accent)' : 'var(--danger)' },
+                { v: `${ev.avg}d`,   l: 'TB xong',      color: 'var(--ink-3)' },
               ].map(m => (
-                <div key={m.l} className="bg-gray-50 rounded-xl p-2.5 text-center">
-                  <p className="text-sm font-bold" style={{ color: m.c }}>{m.v}</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">{m.l}</p>
+                <div key={m.l} className="rounded-lg p-2 text-center" style={{ background: 'var(--bg-soft)' }}>
+                  <p className="text-sm font-bold font-mono" style={{ color: m.color, letterSpacing: '-.01em' }}>{m.v}</p>
+                  <p className="text-[10px] font-mono mt-0.5 text-muted-ink">{m.l}</p>
                 </div>
               ))}
             </div>
 
             {/* Progress bars */}
-            <div className="space-y-1.5 mb-3">
-              <div className="flex items-center gap-2"><span className="text-[10px] text-gray-400 w-16">Hoàn thành</span><div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-green-500" style={{ width: `${ev.cr}%` }} /></div><span className="text-[10px] font-semibold w-9 text-right">{ev.cr}%</span></div>
-              <div className="flex items-center gap-2"><span className="text-[10px] text-gray-400 w-16">Đúng hạn</span><div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${ev.otr}%`, background: ev.otr >= 80 ? '#2563eb' : '#d97706' }} /></div><span className="text-[10px] font-semibold w-9 text-right">{ev.otr}%</span></div>
+            <div className="space-y-2 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono text-muted-ink w-20">Hoàn thành</span>
+                <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-soft)' }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${ev.cr}%`, background: 'var(--accent)' }} />
+                </div>
+                <span className="text-[11px] font-semibold font-mono w-10 text-right text-ink">{ev.cr}%</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono text-muted-ink w-20">Đúng hạn</span>
+                <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-soft)' }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${ev.otr}%`, background: ev.otr >= 80 ? 'var(--violet)' : 'var(--warn)' }} />
+                </div>
+                <span className="text-[11px] font-semibold font-mono w-10 text-right text-ink">{ev.otr}%</span>
+              </div>
             </div>
 
             {/* AI Feedback */}
-            <div className="p-3 rounded-xl text-xs leading-relaxed" style={{ background: ev.gc + '08', color: ev.gc, borderLeft: `3px solid ${ev.gc}` }}>
+            <div className="p-3 rounded-lg text-xs leading-relaxed" style={{
+              background: ev.gradeBg,
+              color: ev.gradeColor,
+              borderLeft: `3px solid ${ev.gradeColor}`,
+            }}>
               <span className="font-semibold">Nhận xét: </span>{ev.feedback}
             </div>
           </div>
         ))}
-        {evaluations.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">Chưa có dữ liệu</div>}
+        {evaluations.length === 0 && (
+          <div className="card p-12 text-center">
+            <div className="text-sm text-ink-3">Chưa có dữ liệu trong kỳ này</div>
+          </div>
+        )}
       </div>
     </div>
   );
