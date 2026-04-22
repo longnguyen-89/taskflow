@@ -17,7 +17,7 @@ function renderMentions(text, mentionables) {
   let last = 0; let m;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(text.slice(last, m.index));
-    parts.push(<span key={m.index} className="text-blue-600 font-semibold bg-blue-50 px-1 rounded">@{m[1]}</span>);
+    parts.push(<span key={m.index} className="font-semibold px-1 rounded" style={{ color: 'var(--accent)', background: 'var(--accent-soft)' }}>@{m[1]}</span>);
     last = m.index + m[0].length;
   }
   if (last < text.length) parts.push(text.slice(last));
@@ -93,14 +93,15 @@ function MentionInput({ value, setValue, onSend, mentionables, onMention, ini, p
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
       {open && filtered.length > 0 && (
-        <div className="absolute bottom-full left-0 mb-1 w-64 max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+        <div className="absolute bottom-full left-0 mb-1 w-64 max-h-56 overflow-y-auto rounded-lg z-50" style={{ background: '#fff', border: '1px solid var(--line)', boxShadow: '0 12px 24px rgba(18,53,36,0.12)' }}>
           {filtered.map((m, i) => (
             <div key={m.id} onMouseDown={(e) => { e.preventDefault(); pickMention(m); }}
-              className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer text-xs ${i === selIdx ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
-              <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: m.avatar_color || '#f3f4f6', color: '#333' }}>{ini(m.name)}</div>
+              className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer text-xs transition-colors"
+              style={i === selIdx ? { background: 'var(--accent-soft)' } : {}}>
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0" style={{ background: m.avatar_color || 'var(--bg-soft)', color: 'var(--ink)' }}>{ini(m.name)}</div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{m.name}</p>
-                <p className="text-[9px] text-gray-400 truncate">
+                <p className="font-medium truncate" style={{ color: 'var(--ink)' }}>{m.name}</p>
+                <p className="text-[10px] truncate" style={{ color: 'var(--muted)' }}>
                   {m.role === 'director' ? 'Tổng Giám đốc' : m.role === 'accountant' ? 'Kế toán' : (m.position || '')}
                   {m.department ? ` · ${m.department === 'hotel' ? 'Hotel' : 'Nail'}` : ''}
                 </p>
@@ -145,7 +146,10 @@ const MAIN_TABS = [
   { id: 'thanh_toan', label: 'Thanh toán' },
 ];
 
-export default function Proposals({ userId, userName, members, department, branch, allowedBranches, canViewAll: canViewAllProp, profile, isDirector, isAccountant, canApprove, focusProposalId, clearFocus }) {
+export default function Proposals({ userId, userName, members, department, branch, allowedBranches, canViewAll: canViewAllProp, profile, isDirector, isAccountant, canApprove, canApproveProposal, canDeleteProposal, focusProposalId, clearFocus }) {
+  // Fallback khi parent khong truyen (giu hanh vi cu):
+  const effCanDeleteProp = typeof canDeleteProposal === 'boolean' ? canDeleteProposal : !!isDirector;
+  const effCanApproveProp = typeof canApproveProposal === 'boolean' ? canApproveProposal : !!canApprove;
   // Chi nhánh được chọn khi tạo đề xuất mới. Mặc định = chi nhánh đang xem,
   // hoặc chi nhánh duy nhất của user nếu chỉ có 1.
   const defaultCreateBranch = branch || (department === 'nail' && profile?.branches?.length === 1 ? profile.branches[0] : '');
@@ -369,13 +373,15 @@ export default function Proposals({ userId, userName, members, department, branc
   }
 
   async function handleDeleteProposal(pid, pTitle) {
-    if (!isDirector) return;
+    if (!effCanDeleteProp) return;
     const ok = typeof window !== 'undefined' && window.confirm(
       `⚠ XOÁ VĨNH VIỄN đề xuất này?\n\n"${pTitle}"\n\nSẽ xoá cả: người duyệt, người theo dõi, file đính kèm, bình luận. KHÔNG thể khôi phục.`
     );
     if (!ok) return;
+    const pObj = proposals.find(p => p.id === pid);
     const { error } = await deleteProposalCascade(pid, userId);
     if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    logActivity({ userId, userName, action: ACTIONS.PROPOSAL_DELETED, targetType: 'proposal', targetId: pid, targetTitle: pTitle, department: pObj?.department, branch: pObj?.branch });
     toast('Đã xoá đề xuất', 'success');
     fetchAll();
   }
@@ -539,19 +545,25 @@ export default function Proposals({ userId, userName, members, department, branc
 
       {showForm && (
         <div className="card p-5 mb-5 animate-slide-up">
-          <h3 className="font-semibold text-sm mb-1">Tạo đề xuất — {tabLabel}</h3>
-          <p className="text-[11px] text-gray-400 mb-4">Đề xuất sẽ được lưu vào tab &quot;{tabLabel}&quot;</p>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
+            <h3 className="font-semibold text-sm text-ink" style={{ letterSpacing: '-.005em' }}>Tạo đề xuất — {tabLabel}</h3>
+          </div>
+          <p className="text-[11px] mb-4 ml-3.5" style={{ color: 'var(--muted)' }}>Đề xuất sẽ được lưu vào tab &quot;{tabLabel}&quot;</p>
           <form onSubmit={handleSubmit} className="space-y-3">
             {department === 'nail' && createBranchOptions.length > 0 && (
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Chi nhánh *</label>
+                <label className="eyebrow block mb-1.5">Chi nhánh *</label>
                 {createBranchOptions.length === 1 ? (
-                  <div className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold">{branchLabel(createBranchOptions[0])}</div>
+                  <div className="px-3 py-2 rounded-lg text-xs font-semibold inline-block" style={{ background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--accent)' }}>{branchLabel(createBranchOptions[0])}</div>
                 ) : (
                   <div className="flex gap-1.5 flex-wrap">
                     {createBranchOptions.map(bid => (
                       <button key={bid} type="button" onClick={() => setCreateBranch(bid)}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${createBranch === bid ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-500'}`}>
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all"
+                        style={createBranch === bid
+                          ? { background: 'var(--accent-soft)', border: '1px solid var(--accent)', color: 'var(--accent)' }
+                          : { background: '#fff', border: '1px solid var(--line)', color: 'var(--muted)' }}>
                         {branchLabel(bid)}
                       </button>
                     ))}
@@ -559,36 +571,36 @@ export default function Proposals({ userId, userName, members, department, branc
                 )}
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Tiêu đề *</label><input className="input-field !text-sm" value={title} onChange={e => setTitle(e.target.value)} required /></div>
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Phân loại chi tiết</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div><label className="eyebrow block mb-1">Tiêu đề *</label><input className="input-field !text-sm" value={title} onChange={e => setTitle(e.target.value)} required /></div>
+              <div><label className="eyebrow block mb-1">Phân loại chi tiết</label>
                 <select className="input-field !text-sm" value={catId} onChange={e => setCatId(e.target.value)}>
                   <option value="">— {tabLabel} (mặc định) —</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
             </div>
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Mô tả chi tiết</label><textarea className="input-field !text-sm min-h-[70px] resize-y" value={desc} onChange={e => setDesc(e.target.value)} /></div>
+            <div><label className="eyebrow block mb-1">Mô tả chi tiết</label><textarea className="input-field !text-sm min-h-[70px] resize-y" value={desc} onChange={e => setDesc(e.target.value)} /></div>
 
             {/* Cost input with auto-formatting */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Chi phí dự kiến (VNĐ)</label>
+              <label className="eyebrow block mb-1">Chi phí dự kiến · VNĐ</label>
               <div className="relative">
                 <input className="input-field !text-sm !pr-12" type="text" inputMode="numeric" value={costDisplay} onChange={handleCostChange} placeholder="VD: 1.022.000" />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">VNĐ</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono" style={{ color: 'var(--muted)' }}>VNĐ</span>
               </div>
-              {costDisplay && <p className="text-[10px] text-emerald-600 mt-0.5">{costDisplay} VNĐ</p>}
+              {costDisplay && <p className="text-[11px] font-mono mt-0.5" style={{ color: 'var(--accent)' }}>{costDisplay} VNĐ</p>}
             </div>
 
             {/* =================== CHI TIẾT MẶT HÀNG (items) =================== */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Chi tiết <span className="text-gray-400 font-normal">(tùy chọn — liệt kê từng mặt hàng / khoản chi)</span>
+              <label className="eyebrow block mb-1.5">
+                Chi tiết <span className="normal-case" style={{ color: 'var(--muted)' }}>(tùy chọn · liệt kê từng mặt hàng / khoản chi)</span>
               </label>
 
               {/* Desktop: table layout */}
-              <div className="hidden md:block border border-gray-200 rounded-xl overflow-hidden">
-                <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-2 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+              <div className="hidden md:block rounded-xl overflow-hidden" style={{ border: '1px solid var(--line)' }}>
+                <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-2 text-[10px] font-semibold uppercase tracking-wide" style={{ background: 'var(--bg-soft)', borderBottom: '1px solid var(--line)', color: 'var(--muted)' }}>
                   <div className="text-center">#</div>
                   <div>Tên mặt hàng</div>
                   <div>ĐVT</div>
@@ -601,19 +613,20 @@ export default function Proposals({ userId, userName, members, department, branc
                 {items.map((it, idx) => {
                   const itFiles = Array.isArray(it.files) ? it.files : [];
                   return (
-                  <div key={idx} className="border-b border-gray-100 last:border-b-0">
+                  <div key={idx} style={{ borderBottom: '1px solid var(--line-2)' }}>
                     <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-1.5 items-center">
-                      <div className="text-center text-xs text-gray-500 font-semibold">{idx + 1}</div>
+                      <div className="text-center text-xs font-mono font-semibold" style={{ color: 'var(--muted)' }}>{idx + 1}</div>
                       <input className="input-field !text-xs !py-1.5" placeholder="VD: Nước rửa tay" value={it.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
                       <input className="input-field !text-xs !py-1.5" placeholder="chai" value={it.unit} onChange={e => updateItem(idx, 'unit', e.target.value)} />
-                      <input className="input-field !text-xs !py-1.5 text-right" inputMode="decimal" placeholder="0" value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} />
-                      <input className="input-field !text-xs !py-1.5 text-right" inputMode="numeric" placeholder="0" value={it.unit_price} onChange={e => updateItem(idx, 'unit_price', formatVND(e.target.value))} />
-                      <div className="px-2 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs text-right font-semibold truncate" title={itemTotal(it).toLocaleString('de-DE') + 'đ'}>
+                      <input className="input-field !text-xs !py-1.5 text-right font-mono" inputMode="decimal" placeholder="0" value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} />
+                      <input className="input-field !text-xs !py-1.5 text-right font-mono" inputMode="numeric" placeholder="0" value={it.unit_price} onChange={e => updateItem(idx, 'unit_price', formatVND(e.target.value))} />
+                      <div className="px-2 py-1.5 rounded-lg text-xs text-right font-semibold font-mono truncate" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} title={itemTotal(it).toLocaleString('de-DE') + 'đ'}>
                         {itemTotal(it) > 0 ? itemTotal(it).toLocaleString('de-DE') + 'đ' : '—'}
                       </div>
                       <input className="input-field !text-xs !py-1.5" placeholder="Ghi chú..." value={it.note} onChange={e => updateItem(idx, 'note', e.target.value)} />
                       <button type="button" onClick={() => removeItem(idx)} disabled={items.length <= 1}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                        style={{ color: 'var(--danger)' }}
                         title="Xóa dòng">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
                       </button>
@@ -623,16 +636,17 @@ export default function Proposals({ userId, userName, members, department, branc
                       {itFiles.map((f, fi) => (
                         <a key={fi} href={f.url} target="_blank" rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="group inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-[10px] text-blue-700 max-w-[200px]">
+                          className="group inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] max-w-[200px]"
+                          style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
                           <span className="flex-shrink-0">{getFileIcon(f.name)}</span>
                           <span className="truncate" title={f.name}>{f.name}</span>
                           <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeItemFile(idx, fi); }}
-                            className="flex-shrink-0 text-red-400 hover:text-red-600 ml-0.5" title="Xóa file">
+                            className="flex-shrink-0 ml-0.5" style={{ color: 'var(--danger)' }} title="Xóa file">
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                           </button>
                         </a>
                       ))}
-                      <label className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer text-[10px] text-gray-500 ${uploadingItemIdx === idx ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <label className={`inline-flex items-center gap-1 px-2 py-1 rounded-md cursor-pointer text-[10px] transition-colors ${uploadingItemIdx === idx ? 'opacity-50 pointer-events-none' : ''}`} style={{ border: '1px dashed var(--line)', background: '#fff', color: 'var(--muted)' }}>
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                         {uploadingItemIdx === idx ? 'Đang tải...' : (itFiles.length > 0 ? 'Thêm file' : 'Đính kèm file')}
                         <input type="file" multiple className="hidden" onChange={(e) => handleItemFileUpload(idx, e)} />
@@ -643,10 +657,10 @@ export default function Proposals({ userId, userName, members, department, branc
                 })}
                 {/* Tổng cộng hàng cuối */}
                 {items.some(it => it.name && it.name.trim()) && (
-                  <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-2 bg-emerald-50/50 border-t-2 border-emerald-200 text-xs font-bold">
+                  <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-2 text-xs font-bold" style={{ background: 'var(--accent-soft)', borderTop: '2px solid var(--accent)' }}>
                     <div></div>
-                    <div className="col-span-4 text-right text-gray-700">Tổng cộng:</div>
-                    <div className="text-right text-emerald-700">{itemsGrandTotal(items).toLocaleString('de-DE')}đ</div>
+                    <div className="col-span-4 text-right" style={{ color: 'var(--ink-2)' }}>Tổng cộng:</div>
+                    <div className="text-right font-mono" style={{ color: 'var(--accent)' }}>{itemsGrandTotal(items).toLocaleString('de-DE')}đ</div>
                     <div></div>
                     <div></div>
                   </div>
@@ -841,11 +855,11 @@ export default function Proposals({ userId, userName, members, department, branc
               </div>
               {isExp && (
                 <div className="mt-3 pt-3 border-t border-gray-100 animate-fade-in">
-                  {isDirector && (
+                  {effCanDeleteProp && (
                     <div className="flex justify-end mb-2">
                       <button onClick={(e) => { e.stopPropagation(); handleDeleteProposal(p.id, p.title); }}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-red-600 hover:bg-red-50 transition-colors"
-                        title="Xoá vĩnh viễn (chỉ TGĐ)">
+                        title="Xoá vĩnh viễn">
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
                         Xoá đề xuất
                       </button>
@@ -950,10 +964,10 @@ export default function Proposals({ userId, userName, members, department, branc
                         <span className="text-xs flex-1">{a.user?.name}</span>
                         {a.status === 'approved' && <span className="text-[10px] text-green-600 font-semibold">✓ Duyệt {a.decided_at ? fmtDT(a.decided_at) : ''}</span>}
                         {a.status === 'rejected' && <span className="text-[10px] text-red-600 font-semibold">✗ Từ chối</span>}
-                        {a.status === 'pending' && a.user_id === userId && canApprove && (
+                        {a.status === 'pending' && a.user_id === userId && effCanApproveProp && (
                           <div className="flex gap-1"><button onClick={() => handleApprove(p.id, userId, 'approved')} className="px-2 py-0.5 bg-green-600 text-white rounded text-[10px]">Duyệt</button><button onClick={() => handleApprove(p.id, userId, 'rejected')} className="px-2 py-0.5 bg-red-600 text-white rounded text-[10px]">Từ chối</button></div>
                         )}
-                        {a.status === 'pending' && (a.user_id !== userId || !canApprove) && <span className="text-[10px] text-amber-600">Chờ...</span>}
+                        {a.status === 'pending' && (a.user_id !== userId || !effCanApproveProp) && <span className="text-[10px] text-amber-600">Chờ...</span>}
                       </div>
                     ))}
                   </div>

@@ -283,3 +283,17 @@ profiles, tasks, task_assignees, task_watchers, task_files, task_groups, task_ch
 - **Files**: 1 new (`supabase-migration-2026-04-18.sql` — document table + seed).
 - **DEPLOYED**: migration applied only (khong can redeploy — code khong thay doi).
 - **Safety**: Migration chay `CREATE TABLE IF NOT EXISTS` + `ON CONFLICT DO NOTHING` — khong anh huong 1 row `appearance` hien co.
+
+### 2026-04-22 — Executive Dashboard redesign cho Tong quan (viewMode=list)
+- **Yeu cau user**: "tôi muốn phần giao diện ngoài Tổng quan giống như hình số 2 mà tôi gửi. ở mục danh sách. còn mục kanban giữ nguyên" + "xóa 2 dòng chữ nail - 4 chi nhánh và hotel - 4 chi nhánh đi luôn" (sidebar).
+- **Thay doi**: Thay toan bo UI "Danh sach" cua tab Tong quan bang Executive Dashboard theo design reference (`design-tasks-flow/project/components/dashboard.jsx`). Kanban giu nguyen khong doi.
+- **Executive header**: hien thi date mono uppercase (Thu X · dd.mm.yyyy), greeting "Chào, {Giám đốc|Kế toán|Quản lý|Ten}.", summary "Hôm nay có N task cần bạn để mắt và M đề xuất đợi duyệt", 2 button "Xem báo cáo" (→ tab performance) + "Tạo task mới" (→ tab create).
+- **4 KPI cards**: Task dang mo (delta so voi tuan truoc), Hoan thanh tuan nay (delta% so voi tuan truoc), Tre han (delta), De xuat cho duyet. Moi card co number 28px + DeltaBadge (arrow up/down) + sparkline 10 cot (9 xam, cot cuoi mau accent/warn/danger).
+- **Focus list "Can chu y hom nay"** (left, 1.6fr): top 5 task sap xep theo pinned + urgency score. Header co 3 pill dem so task: "Tre N" (danger), "Hom nay N" (warn), "Tuan nay N" (accent). Moi row hien: pin icon (neu pinned), status dot (circle filled theo status), title + metadata (#id · branch · file count), deadline pill (Trễ Nd / Hôm nay / Ngày mai / Còn Nd / dd/mm), avatar stack. Click row → switch sang Kanban + set focusTaskId. Footer co link "Xem toàn bộ task →" (switch sang Kanban).
+- **Health score card** (right top): SVG circle 72×72 voi progress = healthScore/100. healthScore = onTimeRate*0.5 + completionRate*0.5. Color: >80 accent, >60 warn, else danger. Label: "Vận hành tốt"/"Cần chú ý"/"Cần cải thiện". Delta so voi tuan truoc.
+- **Assignee ranking card** (right bottom): top 4 member theo rate = done/total, sap xep desc. Row hien: #rank, avatar, name, progress bar 60px (rate%), text "done/total".
+- **Data layer** (dashboard.js): them `pendingProposalsCount` state + fetch trong fetchData. Tinh openTasks/doneThisWeek/donePrevWeek/overdueTasks, sparkDone/sparkOpen/sparkOverdue/sparkProp (10 ngay), deltaDoneWeek/deltaDoneWeekPct/deltaOpen/deltaOverdue, focusTasks (top 5 by taskUrgency), focusCounts, healthScore/healthLast/healthDelta, memberStats (top 4).
+- **Helper components** (trong Dashboard): Sparkline, DeltaBadge, AvatarChip — dung lai cho KPI row + focus list + ranking.
+- **Sidebar cleanup**: xoa 2 dong "{dept} · {N} chi nhánh" o subtitle sidebar (user yeu cau).
+- **Build**: `next build` sach. Dashboard bundle 61.6 kB (tang ~2kB tu 59.3 kB).
+- **Files**: 1 modified (`src/pages/dashboard.js`).

@@ -34,8 +34,10 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
       `⚠ XOÁ VĨNH VIỄN task này?\n\n"${taskTitle}"\n\nSẽ xoá cả: sub-task, comment, file đính kèm, checklist, lịch sử. KHÔNG thể khôi phục.`
     );
     if (!ok) return;
+    const taskObj = tasks.find(t => t.id === taskId);
     const { error } = await deleteTaskCascade(taskId, userId);
     if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    logActivity({ userId, userName: members.find(m => m.id === userId)?.name, action: ACTIONS.TASK_DELETED, targetType: 'task', targetId: taskId, targetTitle: taskTitle, department: taskObj?.department, branch: taskObj?.branch });
     toast('Đã xoá task', 'success');
     onRefresh && onRefresh();
   }
@@ -308,6 +310,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
         await supabase.from('task_files').insert({ task_id: sub.id, file_name: f.name, file_url: publicUrl, file_type: f.type, file_size: f.size, uploaded_by: userId });
       }
     }
+    logActivity({ userId, userName: members.find(m => m.id === userId)?.name, action: ACTIONS.SUBTASK_CREATED, targetType: 'task', targetId: sub.id, targetTitle: subTitle.trim(), details: { parent_id: parentId, parent_title: parentTask?.title }, department: parentTask?.department, branch: parentTask?.branch });
     toast('Đã tạo nhiệm vụ con!', 'success');
     setSubTitle(''); setSubDeadline(''); setSubFiles([]); setShowSubForm(null); setSubCreating(false);
     loadSubTasks(parentId);
@@ -359,11 +362,14 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
 
   // Overdue reason modal — rendered above all views
   const overdueModalEl = overdueModal && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setOverdueModal(null)}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-bold text-red-700 mb-1">⚠ Task này đã trễ hạn</h3>
-        <p className="text-xs text-gray-500 mb-3">Vui lòng chọn lý do trễ trước khi đổi trạng thái. Dữ liệu này phục vụ báo cáo cuối tháng.</p>
-        <div className="space-y-1.5 mb-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in" onClick={() => setOverdueModal(null)}>
+      <div className="card max-w-md w-full p-5" onClick={e => e.stopPropagation()} style={{ boxShadow: '0 24px 48px rgba(18,53,36,0.22)' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="w-2 h-2 rounded-full" style={{ background: 'var(--danger)' }} />
+          <h3 className="text-sm font-semibold text-ink">Task này đã trễ hạn</h3>
+        </div>
+        <p className="text-[11px] text-muted-ink mb-3 ml-4">Chọn lý do trễ trước khi đổi trạng thái. Dữ liệu phục vụ báo cáo cuối tháng.</p>
+        <div className="space-y-1 mb-3">
           {[
             'Không đủ thời gian',
             'Thiếu nguồn lực / công cụ',
@@ -372,8 +378,12 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
             'Quên / sót việc',
             'Khác (ghi chú thêm bên dưới)',
           ].map(r => (
-            <label key={r} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs ${overdueReason === r ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-              <input type="radio" name="overdue-reason" checked={overdueReason === r} onChange={() => setOverdueReason(r)} className="accent-emerald-600" />
+            <label key={r} className="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs transition-colors" style={{
+              borderColor: overdueReason === r ? 'var(--accent)' : 'var(--line)',
+              background: overdueReason === r ? 'var(--accent-soft)' : '#fff',
+              color: overdueReason === r ? 'var(--accent)' : 'var(--ink)'
+            }}>
+              <input type="radio" name="overdue-reason" checked={overdueReason === r} onChange={() => setOverdueReason(r)} style={{ accentColor: 'var(--accent)' }} />
               <span>{r}</span>
             </label>
           ))}
@@ -386,8 +396,8 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
           onChange={e => setOverdueNote(e.target.value)}
         />
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setOverdueModal(null)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">Hủy</button>
-          <button onClick={submitOverdueReason} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#123524' }}>Xác nhận & cập nhật</button>
+          <button onClick={() => setOverdueModal(null)} className="btn-secondary !px-4 !py-1.5 !text-xs">Hủy</button>
+          <button onClick={submitOverdueReason} className="btn-accent !px-4 !py-1.5 !text-xs">Xác nhận</button>
         </div>
       </div>
     </div>
@@ -417,10 +427,15 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
           return (
             <div key={key} className="card p-4">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ background: g.avatar_color || '#f3f4f6', color: '#333' }}>{ini(g.name)}</div>
-                <div className="flex-1"><p className="text-sm font-semibold">{g.name}</p><p className="text-[10px] text-gray-400">{g.position} · {done}/{g.tasks.length} xong</p></div>
-                <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: pct + '%', background: pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626' }} /></div>
-                <span className="text-[10px] font-bold text-gray-400 w-8 text-right">{pct}%</span>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ background: g.avatar_color || 'var(--bg-soft)', color: 'var(--ink)' }}>{ini(g.name)}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-ink truncate" style={{ letterSpacing: '-.005em' }}>{g.name}</p>
+                  <p className="text-[10px] font-mono" style={{ color: 'var(--muted)' }}>{g.position} · {done}/{g.tasks.length} xong</p>
+                </div>
+                <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-soft)' }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: pct + '%', background: pct >= 80 ? 'var(--accent)' : pct >= 50 ? 'var(--warn)' : 'var(--danger)' }} />
+                </div>
+                <span className="text-[11px] font-bold font-mono w-9 text-right" style={{ color: pct >= 80 ? 'var(--accent)' : pct >= 50 ? 'var(--warn)' : 'var(--danger)' }}>{pct}%</span>
               </div>
               <div className="space-y-1.5">{g.tasks.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div>
             </div>
@@ -451,11 +466,12 @@ function FileList({ files }) {
         const icon = getFileIcon(f.file_name || f.name);
         return (
           <a key={f.id || i} href={f.file_url || f.url} target="_blank" rel="noreferrer"
-            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group">
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg transition-colors group"
+            style={{ background: 'var(--bg-soft)', border: '1px solid var(--line-2)' }}>
             <span className="text-sm flex-shrink-0">{icon}</span>
-            <span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.file_name || f.name}</span>
-            {(f.file_size || f.size) > 0 && <span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.file_size || f.size)}</span>}
-            <svg className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            <span className="text-xs truncate flex-1 transition-colors" style={{ color: 'var(--ink-2)' }}>{f.file_name || f.name}</span>
+            {(f.file_size || f.size) > 0 && <span className="text-[10px] font-mono flex-shrink-0" style={{ color: 'var(--muted)' }}>{formatFileSize(f.file_size || f.size)}</span>}
+            <svg className="w-3 h-3 flex-shrink-0 transition-colors" style={{ color: 'var(--muted)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
           </a>
         );
       })}
@@ -494,56 +510,64 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
         <svg className="w-3 h-3 transition-transform flex-shrink-0" style={{ color: 'var(--muted)', transform: exp ? 'rotate(180deg)' : 'none' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
       </div>
       {exp && (
-        <div className="px-3 pb-3 border-t border-gray-100 pt-2.5 animate-fade-in">
-          {t.description && <p className="text-xs text-gray-500 mb-2">{t.description}</p>}
-          <div className="flex flex-wrap gap-2 text-[10px] text-gray-400 mb-2 items-center">
-            <span>Tạo: {fmtDT(t.created_at)}</span>
-            {t.deadline && <span>Hạn: {fmtDT(t.deadline)}</span>}
-            {t.completed_at && <span>Xong: {fmtDT(t.completed_at)}</span>}
-            <span>Giao bởi: {t.creator?.name}</span>
+        <div className="px-3 pb-3 pt-3 animate-fade-in" style={{ borderTop: '1px solid var(--line-2)' }}>
+          {t.description && <p className="text-xs mb-2.5" style={{ color: 'var(--ink-3)', lineHeight: 1.55 }}>{t.description}</p>}
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] mb-2.5 items-center" style={{ color: 'var(--muted)' }}>
+            <span className="font-mono">Tạo · {fmtDT(t.created_at)}</span>
+            {t.deadline && <span className="font-mono">Hạn · {fmtDT(t.deadline)}</span>}
+            {t.completed_at && <span className="font-mono" style={{ color: 'var(--accent)' }}>Xong · {fmtDT(t.completed_at)}</span>}
+            <span>Giao bởi <strong className="font-medium" style={{ color: 'var(--ink-3)' }}>{t.creator?.name}</strong></span>
             <div className="ml-auto flex items-center gap-1">
               {canPinTasks && togglePin && (
                 <button
                   onClick={(e) => { e.stopPropagation(); togglePin(t.id, t.pinned, t.title); }}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${t.pinned ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-gray-500 hover:bg-gray-100'}`}
+                  className="pill transition-colors"
+                  style={t.pinned
+                    ? { background: 'var(--gold-soft)', color: 'var(--gold)', fontSize: 10 }
+                    : { background: 'var(--bg-soft)', color: 'var(--muted)', fontSize: 10 }}
                   title={t.pinned ? 'Bỏ ghim' : 'Ghim task lên đầu'}>
-                  <span className="text-[11px]">📌</span>
+                  <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2l1.5 3.5L14 7l-2.5 2 .5 3.5L9 11 6 12.5 6.5 9 4 7l3.5-1.5L9 2z" /></svg>
                   {t.pinned ? 'Bỏ ghim' : 'Ghim'}
                 </button>
               )}
               {(isDirector || canDeleteTask) && delTask && (
                 <button
                   onClick={(e) => { e.stopPropagation(); delTask(t.id, t.title); }}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                  className="pill transition-colors"
+                  style={{ background: 'var(--danger-soft)', color: 'var(--danger)', fontSize: 10 }}
                   title="Xoá vĩnh viễn">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
                   Xoá
                 </button>
               )}
             </div>
           </div>
           {t.overdue_reason && (
-            <div className="mb-2 px-2 py-1.5 rounded-lg bg-red-50 border border-red-100 text-[10px]">
-              <span className="font-semibold text-red-700">⚠ Lý do trễ hạn:</span> <span className="text-red-700">{t.overdue_reason}</span>
-              {t.overdue_reason_note && <p className="text-red-600 mt-0.5 italic">"{t.overdue_reason_note}"</p>}
+            <div className="mb-2.5 px-2.5 py-2 rounded-lg text-[10px]" style={{ background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderLeftWidth: 3 }}>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--danger)' }} />
+                <span className="font-semibold uppercase tracking-wide" style={{ color: 'var(--danger)' }}>Lý do trễ hạn</span>
+              </div>
+              <p className="mt-0.5" style={{ color: 'var(--danger)' }}>{t.overdue_reason}</p>
+              {t.overdue_reason_note && <p className="mt-0.5 italic" style={{ color: 'var(--danger)', opacity: 0.8 }}>"{t.overdue_reason_note}"</p>}
             </div>
           )}
           {t.files?.length > 0 && (
-            <div className="mb-2">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Đính kèm ({t.files.length})</p>
+            <div className="mb-2.5">
+              <p className="eyebrow mb-1">Đính kèm · {t.files.length}</p>
               <FileList files={t.files} />
             </div>
           )}
           {t.status !== 'done' && (
-            <div className="flex gap-1 mb-3 flex-wrap">
+            <div className="flex gap-1.5 mb-3 flex-wrap">
               {['todo', 'doing', 'waiting', 'done'].filter(s => s !== t.status).map(s => (
-                <button key={s} onClick={() => upd(t.id, s)} className="px-2 py-1 rounded text-[10px] font-semibold cursor-pointer hover:opacity-80" style={{ background: ST[s].c + '15', color: ST[s].c }}>→ {ST[s].l}</button>
+                <button key={s} onClick={() => upd(t.id, s)} className="pill transition-all hover:shadow-sm" style={{ background: ST[s].c + '15', color: ST[s].c, fontSize: 11, fontWeight: 600 }}>→ {ST[s].l}</button>
               ))}
             </div>
           )}
 
           {/* ============ CHECKLIST SECTION ============ */}
-          <div className="mt-3 pt-3 border-t border-gray-100">
+          <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--line-2)' }}>
             {(() => {
               const items = checklist || [];
               const doneCount = items.filter(i => i.done).length;
@@ -551,22 +575,26 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
               return (
                 <>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase">
-                      Checklist {items.length > 0 && <span className="text-emerald-600">({doneCount}/{items.length} · {pct}%)</span>}
+                    <p className="eyebrow">
+                      Checklist {items.length > 0 && <span style={{ color: 'var(--accent)' }}>· {doneCount}/{items.length} · {pct}%</span>}
                     </p>
                   </div>
                   {items.length > 0 && (
-                    <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mb-2">
-                      <div className="h-full transition-all" style={{ width: pct + '%', background: pct === 100 ? '#16a34a' : '#123524' }} />
+                    <div className="w-full h-1 rounded-full overflow-hidden mb-2" style={{ background: 'var(--bg-soft)' }}>
+                      <div className="h-full transition-all" style={{ width: pct + '%', background: pct === 100 ? 'var(--accent)' : 'var(--ink)' }} />
                     </div>
                   )}
                   <div className="space-y-1 mb-2">
                     {items.map(item => (
-                      <div key={item.id} className="flex items-center gap-2 group">
+                      <div key={item.id} className="flex items-center gap-2 group px-1.5 py-0.5 rounded hover:bg-[color:var(--bg-soft)]">
                         <input type="checkbox" checked={item.done} onChange={() => toggleChecklistItem(item)}
-                          className="w-3.5 h-3.5 rounded cursor-pointer accent-emerald-600 flex-shrink-0" />
-                        <span className={`text-xs flex-1 ${item.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{item.text}</span>
-                        <button onClick={() => removeChecklistItem(item)} className="text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Xóa">
+                          className="w-3.5 h-3.5 rounded cursor-pointer flex-shrink-0"
+                          style={{ accentColor: 'var(--accent)' }} />
+                        <span className="text-xs flex-1" style={{
+                          color: item.done ? 'var(--muted)' : 'var(--ink-2)',
+                          textDecoration: item.done ? 'line-through' : 'none'
+                        }}>{item.text}</span>
+                        <button onClick={() => removeChecklistItem(item)} className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" style={{ color: 'var(--danger)' }} title="Xóa">
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                       </div>
@@ -574,13 +602,13 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                   </div>
                   <div className="flex gap-1.5">
                     <input
-                      className="input-field !py-1 !text-xs flex-1"
+                      className="input-field !py-1.5 !text-xs flex-1"
                       placeholder="+ Thêm bước checklist..."
                       value={newChkText}
                       onChange={e => setNewChkText(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addChecklistItem(t.id); } }}
                     />
-                    <button onClick={() => addChecklistItem(t.id)} className="px-2 py-1 rounded-lg text-[10px] font-semibold text-white" style={{ background: '#123524' }}>+</button>
+                    <button onClick={() => addChecklistItem(t.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all" style={{ background: 'var(--accent)' }}>+</button>
                   </div>
                 </>
               );
@@ -588,12 +616,12 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
           </div>
 
           {/* ============ SUB-TASKS SECTION ============ */}
-          <div className="mt-3 pt-3 border-t border-gray-100">
+          <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--line-2)' }}>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase">Nhiệm vụ con {hasSubs && `(${subDone}/${subs.length} xong)`}</p>
+              <p className="eyebrow">Nhiệm vụ con {hasSubs && <span style={{ color: 'var(--violet)' }}>· {subDone}/{subs.length}</span>}</p>
               {isAdmin && (
                 <button onClick={(e) => { e.stopPropagation(); setShowSubForm(showSubForm === t.id ? null : t.id); setSubTitle(''); setSubDeadline(''); setSubFiles([]); }}
-                  className="text-[10px] font-semibold px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors" style={{ color: '#123524' }}>
+                  className="pill transition-colors" style={{ background: 'var(--violet-soft)', color: 'var(--violet)', fontSize: 11, fontWeight: 600 }}>
                   + Tạo nhiệm vụ con
                 </button>
               )}
@@ -601,39 +629,39 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
 
             {/* Sub-task creation form */}
             {showSubForm === t.id && (
-              <div className="p-3 mb-3 rounded-xl border border-emerald-200 bg-emerald-50/50 animate-fade-in">
+              <div className="p-3 mb-3 rounded-xl animate-fade-in" style={{ background: 'var(--violet-soft)', border: '1px solid var(--violet)', borderLeftWidth: 3 }}>
                 <div className="space-y-2">
                   <input className="input-field !text-xs !py-1.5" placeholder="Tiêu đề nhiệm vụ con *" value={subTitle} onChange={e => setSubTitle(e.target.value)} />
                   <div className="flex gap-2 items-end">
                     <div className="flex-1">
-                      <label className="block text-[10px] text-gray-500 mb-0.5">Deadline</label>
+                      <label className="eyebrow block mb-0.5">Deadline</label>
                       <input type="datetime-local" className="input-field !text-xs !py-1.5" value={subDeadline} onChange={e => setSubDeadline(e.target.value)} />
                     </div>
                   </div>
                   {/* Sub-task file attachments */}
                   <div>
-                    <label className="block text-[10px] text-gray-500 mb-0.5">Đính kèm</label>
+                    <label className="eyebrow block mb-1">Đính kèm</label>
                     <div className="space-y-1">
                       {subFiles.map((f, i) => (
-                        <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg border border-gray-200 bg-white text-xs">
+                        <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white text-xs" style={{ border: '1px solid var(--line)' }}>
                           <span className="flex-shrink-0">{getFileIcon(f.name)}</span>
-                          <span className="truncate flex-1 text-gray-700">{f.name}</span>
-                          <span className="text-[9px] text-gray-400">{formatFileSize(f.size)}</span>
-                          <button onClick={() => removeSubFile(i)} className="text-red-400 hover:text-red-600">
+                          <span className="truncate flex-1" style={{ color: 'var(--ink-2)' }}>{f.name}</span>
+                          <span className="text-[10px] font-mono" style={{ color: 'var(--muted)' }}>{formatFileSize(f.size)}</span>
+                          <button onClick={() => removeSubFile(i)} style={{ color: 'var(--danger)' }}>
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                           </button>
                         </div>
                       ))}
-                      <label className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer text-xs text-gray-500">
-                        <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                      <label className="flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-white hover:bg-[color:var(--bg-soft)] cursor-pointer text-xs transition-colors" style={{ border: '1px dashed var(--line)', color: 'var(--muted)' }}>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
                         Chọn file
                         <input type="file" multiple className="hidden" onChange={handleAddSubFile} />
                       </label>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => createSubTask(t.id)} disabled={subCreating} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-white disabled:opacity-50" style={{ background: '#123524' }}>{subCreating ? '...' : 'Tạo'}</button>
-                    <button onClick={() => setShowSubForm(null)} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200">Hủy</button>
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setShowSubForm(null)} className="btn-secondary !px-3 !py-1.5 !text-xs">Hủy</button>
+                    <button onClick={() => createSubTask(t.id)} disabled={subCreating} className="btn-accent !px-3 !py-1.5 !text-xs disabled:opacity-50">{subCreating ? '...' : 'Tạo'}</button>
                   </div>
                 </div>
               </div>
@@ -641,34 +669,41 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
 
             {/* Sub-tasks list */}
             {subs.length > 0 && (
-              <div className="space-y-1 ml-2 border-l-2 border-purple-100 pl-3">
+              <div className="space-y-1 ml-2 pl-3" style={{ borderLeft: '2px solid var(--violet-soft)' }}>
                 {subs.map(sub => {
                   const subSt = ST[sub.status] || ST.todo;
                   const subOd = isOverdue(sub.deadline, sub.status);
                   const isSubExp = expandedSub === sub.id;
                   return (
-                    <div key={sub.id} className={`rounded-lg border transition-all ${subOd ? 'border-red-200 bg-red-50/30' : 'border-gray-100 bg-white'}`}>
+                    <div key={sub.id} className="rounded-lg transition-all" style={{
+                      border: `1px solid ${subOd ? 'var(--danger)' : 'var(--line-2)'}`,
+                      borderLeftWidth: subOd ? 3 : 1,
+                      background: subOd ? 'var(--danger-soft)' : '#fff'
+                    }}>
                       <div className="flex items-center gap-2 px-2.5 py-2 cursor-pointer" onClick={() => setExpandedSub(isSubExp ? null : sub.id)}>
                         <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: subSt.c }} />
-                        <p className={`text-xs font-medium flex-1 truncate ${sub.status === 'done' ? 'line-through text-gray-400' : ''}`}>{sub.title}</p>
-                        <span className="px-1 py-0.5 rounded text-[8px] font-semibold" style={{ background: subSt.c + '15', color: subSt.c }}>{subSt.l}</span>
-                        {sub.deadline && <span className={`text-[9px] flex-shrink-0 ${subOd ? 'text-red-600 font-bold' : 'text-gray-400'}`}>{fmtDate(sub.deadline)}{subOd && ' !'}</span>}
-                        {sub.files?.length > 0 && <span className="text-[9px] text-gray-400">📎{sub.files.length}</span>}
-                        <svg className={`w-2.5 h-2.5 text-gray-300 transition-transform ${isSubExp ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                        <p className="text-xs font-medium flex-1 truncate" style={{
+                          color: sub.status === 'done' ? 'var(--muted)' : 'var(--ink-2)',
+                          textDecoration: sub.status === 'done' ? 'line-through' : 'none'
+                        }}>{sub.title}</p>
+                        <span className="pill flex-shrink-0" style={{ background: subSt.c + '15', color: subSt.c, fontSize: 9 }}>{subSt.l}</span>
+                        {sub.deadline && <span className="text-[10px] font-mono flex-shrink-0" style={{ color: subOd ? 'var(--danger)' : 'var(--muted)', fontWeight: subOd ? 700 : 400 }}>{fmtDate(sub.deadline)}{subOd && ' !'}</span>}
+                        {sub.files?.length > 0 && <span className="text-[10px] font-mono flex-shrink-0" style={{ color: 'var(--muted)' }}>📎{sub.files.length}</span>}
+                        <svg className="w-2.5 h-2.5 transition-transform flex-shrink-0" style={{ color: 'var(--muted)', transform: isSubExp ? 'rotate(180deg)' : 'none' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                       </div>
                       {isSubExp && (
-                        <div className="px-2.5 pb-2 border-t border-gray-50 pt-2 animate-fade-in">
-                          {sub.deadline && <p className="text-[10px] text-gray-400 mb-1">Hạn: {fmtDT(sub.deadline)}</p>}
+                        <div className="px-2.5 pb-2 pt-2 animate-fade-in" style={{ borderTop: '1px solid var(--line-2)' }}>
+                          {sub.deadline && <p className="text-[10px] font-mono mb-1" style={{ color: 'var(--muted)' }}>Hạn · {fmtDT(sub.deadline)}</p>}
                           {sub.files?.length > 0 && (
                             <div className="mb-2">
-                              <p className="text-[9px] font-semibold text-gray-400 uppercase mb-0.5">File ({sub.files.length})</p>
+                              <p className="eyebrow mb-0.5">File · {sub.files.length}</p>
                               <FileList files={sub.files} />
                             </div>
                           )}
                           {sub.status !== 'done' && (
                             <div className="flex gap-1 flex-wrap">
                               {['todo', 'doing', 'waiting', 'done'].filter(s => s !== sub.status).map(s => (
-                                <button key={s} onClick={() => updateSubStatus(sub.id, s, t.id)} className="px-1.5 py-0.5 rounded text-[9px] font-semibold cursor-pointer hover:opacity-80" style={{ background: ST[s].c + '15', color: ST[s].c }}>→ {ST[s].l}</button>
+                                <button key={s} onClick={() => updateSubStatus(sub.id, s, t.id)} className="pill transition-all hover:shadow-sm" style={{ background: ST[s].c + '15', color: ST[s].c, fontSize: 10, fontWeight: 600 }}>→ {ST[s].l}</button>
                               ))}
                             </div>
                           )}
@@ -679,17 +714,19 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                 })}
               </div>
             )}
-            {subs.length === 0 && !showSubForm && <p className="text-[10px] text-gray-300 italic">Chưa có nhiệm vụ con</p>}
+            {subs.length === 0 && !showSubForm && <p className="text-[10px] italic" style={{ color: 'var(--muted)', opacity: 0.6 }}>Chưa có nhiệm vụ con</p>}
           </div>
 
           {/* Comments */}
-          <div className="mt-3 pt-2 border-t border-gray-100">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1.5">Bình luận {comments?.length > 0 && `(${comments.length})`}</p>
-            {comments?.map(c => (
-              <CommentRow key={c.id} c={c} ini={ini} timeAgo={timeAgo} mentionables={mentionables} uid={uid} toggleReaction={toggleReaction} taskId={t.id} />
-            ))}
+          <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--line-2)' }}>
+            <p className="eyebrow mb-2">Bình luận {comments?.length > 0 && <span style={{ color: 'var(--ink-3)' }}>· {comments.length}</span>}</p>
+            <div className="space-y-0.5 mb-2">
+              {comments?.map(c => (
+                <CommentRow key={c.id} c={c} ini={ini} timeAgo={timeAgo} mentionables={mentionables} uid={uid} toggleReaction={toggleReaction} taskId={t.id} />
+              ))}
+            </div>
             {(() => { const draft = getDraft(t.id); return (
-            <div className="space-y-1.5 mt-1.5">
+            <div className="space-y-1.5">
               <div className="flex gap-2">
                 <CommentInput
                   value={exp ? draft.text : ''}
@@ -699,22 +736,22 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                   onMention={(mId) => setDraftField(t.id, 'mentionedIds', draft.mentionedIds.includes(mId) ? draft.mentionedIds : [...draft.mentionedIds, mId])}
                   ini={ini}
                 />
-                <label className="flex items-center px-2 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer text-gray-500" title="Đính kèm file">
+                <label className="flex items-center px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors" style={{ background: 'var(--bg-soft)', color: 'var(--muted)', border: '1px solid var(--line)' }} title="Đính kèm file">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   <input type="file" multiple className="hidden" onChange={(e) => handleAddCommentFile(t.id, e)} />
                 </label>
-                <button onClick={() => addC(t.id)} disabled={uploading} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#123524' }}>
+                <button onClick={() => addC(t.id)} disabled={uploading} className="btn-accent !px-4 !py-1.5 !text-xs disabled:opacity-50">
                   {uploading ? '...' : 'Gửi'}
                 </button>
               </div>
               {draft.files.length > 0 && (
                 <div className="space-y-1">
                   {draft.files.map((f, i) => (
-                    <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-blue-50 text-xs text-blue-700">
+                    <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
                       <span>{getFileIcon(f.name)}</span>
                       <span className="truncate flex-1">{f.name}</span>
-                      <span className="text-[9px] text-blue-400">{formatFileSize(f.size)}</span>
-                      <button onClick={() => removeCommentFile(t.id, i)} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                      <span className="text-[10px] font-mono opacity-75">{formatFileSize(f.size)}</span>
+                      <button onClick={() => removeCommentFile(t.id, i)} className="flex-shrink-0" style={{ color: 'var(--danger)' }}>
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                       </button>
                     </div>
@@ -735,7 +772,8 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                   <div className="flex flex-wrap gap-1.5 animate-fade-in">
                     {suggestions.map(m => (
                       <button key={m.id} onClick={() => assignMentionedUser(t.id, m.id, m.name)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-medium text-emerald-700 transition-all">
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all hover:shadow-sm"
+                        style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                         </svg>
@@ -769,35 +807,43 @@ function CommentRow({ c, ini, timeAgo, mentionables, uid, toggleReaction, taskId
   const reactionEntries = Object.entries(reactionGroups);
 
   return (
-    <div className="flex gap-2 mb-2 group relative">
-      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0 mt-0.5" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div>
+    <div className="flex gap-2 py-1.5 group relative">
+      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0 mt-0.5" style={{ background: c.user?.avatar_color || 'var(--bg-soft)', color: 'var(--ink)' }}>{ini(c.user?.name)}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>
-        {c.content && <p className="text-xs text-gray-600 whitespace-pre-wrap">{renderMentions(c.content, mentionables)}</p>}
+        <p className="text-[10px] mb-0.5">
+          <strong style={{ color: 'var(--ink)' }}>{c.user?.name}</strong>
+          <span className="font-mono ml-1.5" style={{ color: 'var(--muted)' }}>{timeAgo(c.created_at)}</span>
+        </p>
+        {c.content && <p className="text-xs whitespace-pre-wrap" style={{ color: 'var(--ink-3)', lineHeight: 1.5 }}>{renderMentions(c.content, mentionables)}</p>}
         {c.files && c.files.length > 0 && <FileList files={c.files} />}
         {/* Reactions display + picker */}
         <div className="flex items-center gap-1 mt-1 flex-wrap">
           {reactionEntries.map(([emoji, info]) => (
             <button key={emoji} onClick={() => toggleReaction(c.id, emoji, taskId)}
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] transition-all ${info.mine ? 'bg-blue-100 border border-blue-300 text-blue-700' : 'bg-gray-100 border border-transparent text-gray-600 hover:bg-gray-200'}`}>
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] transition-all"
+              style={info.mine
+                ? { background: 'var(--accent-soft)', border: '1px solid var(--accent)', color: 'var(--accent)' }
+                : { background: 'var(--bg-soft)', border: '1px solid var(--line-2)', color: 'var(--ink-3)' }}>
               <span>{emoji}</span>
-              <span className="font-semibold">{info.count}</span>
+              <span className="font-semibold font-mono">{info.count}</span>
             </button>
           ))}
           {/* Add reaction button - hien khi hover comment */}
           <div className="relative">
             <button onClick={() => setShowPicker(v => !v)}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all ${reactionEntries.length === 0 ? 'opacity-0 group-hover:opacity-100' : ''}`}
+              className={`px-1.5 py-0.5 rounded-full text-[10px] transition-all ${reactionEntries.length === 0 ? 'opacity-0 group-hover:opacity-100' : ''}`}
+              style={{ color: 'var(--muted)' }}
               title="Thêm reaction">
               😊+
             </button>
             {showPicker && (
-              <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1 flex gap-0.5 z-10 animate-fade-in">
+              <div className="absolute left-0 top-full mt-1 rounded-lg p-1 flex gap-0.5 z-10 animate-fade-in" style={{ background: '#fff', border: '1px solid var(--line)', boxShadow: '0 8px 20px rgba(18,53,36,0.1)' }}>
                 {REACTION_EMOJIS.map(emoji => {
                   const mine = reactionGroups[emoji]?.mine;
                   return (
                     <button key={emoji} onClick={() => { toggleReaction(c.id, emoji, taskId); setShowPicker(false); }}
-                      className={`w-7 h-7 rounded flex items-center justify-center text-base hover:bg-gray-100 transition-all ${mine ? 'bg-blue-50' : ''}`}
+                      className="w-7 h-7 rounded flex items-center justify-center text-base transition-all"
+                      style={mine ? { background: 'var(--accent-soft)' } : {}}
                       title={mine ? 'Bỏ ' + emoji : 'Thêm ' + emoji}>
                       {emoji}
                     </button>
@@ -824,7 +870,7 @@ function renderMentions(text, mentionables) {
   let last = 0; let m;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(text.slice(last, m.index));
-    parts.push(<span key={m.index} className="text-blue-600 font-semibold bg-blue-50 px-1 rounded">@{m[1]}</span>);
+    parts.push(<span key={m.index} className="font-semibold px-1 rounded" style={{ color: 'var(--accent)', background: 'var(--accent-soft)' }}>@{m[1]}</span>);
     last = m.index + m[0].length;
   }
   if (last < text.length) parts.push(text.slice(last));
@@ -915,17 +961,18 @@ function CommentInput({ value, setValue, onSend, mentionables, onMention, ini })
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
       {open && filtered.length > 0 && (
-        <div className="absolute bottom-full left-0 mb-1 w-64 max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+        <div className="absolute bottom-full left-0 mb-1 w-64 max-h-56 overflow-y-auto rounded-lg z-50" style={{ background: '#fff', border: '1px solid var(--line)', boxShadow: '0 12px 24px rgba(18,53,36,0.12)' }}>
           {filtered.map((m, i) => (
             <div
               key={m.id}
               onMouseDown={(e) => { e.preventDefault(); pickMention(m); }}
-              className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer text-xs ${i === selIdx ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}
+              className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer text-xs transition-colors"
+              style={i === selIdx ? { background: 'var(--accent-soft)' } : {}}
             >
-              <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: m.avatar_color || '#f3f4f6', color: '#333' }}>{ini(m.name)}</div>
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0" style={{ background: m.avatar_color || 'var(--bg-soft)', color: 'var(--ink)' }}>{ini(m.name)}</div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{m.name}</p>
-                <p className="text-[9px] text-gray-400 truncate">
+                <p className="font-medium truncate" style={{ color: 'var(--ink)' }}>{m.name}</p>
+                <p className="text-[10px] truncate" style={{ color: 'var(--muted)' }}>
                   {m.role === 'director' ? 'Tổng Giám đốc' : m.role === 'accountant' ? 'Kế toán' : (m.position || '')}
                   {m.department ? ` · ${m.department === 'hotel' ? 'Hotel' : 'Nail'}` : ''}
                 </p>

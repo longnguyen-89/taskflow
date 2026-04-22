@@ -17,7 +17,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { NAIL_BRANCHES, branchLabel, loadBranches } from '@/lib/branches';
 
 export default function Dashboard() {
-  const { user, profile, loading: authLoading, signOut, isAdmin, isDirector, isAccountant, canApprove, canCreateTask, canDeleteTask, canApproveProposal, canManageUsers, canViewReports, changePassword } = useAuth();
+  const { user, profile, loading: authLoading, signOut, isAdmin, isDirector, isAccountant, canApprove, canCreateTask, canDeleteTask, canDeleteProposal, canApproveProposal, canManageUsers, canViewReports, changePassword } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState('dashboard');
   const canViewAll = isDirector || isAccountant;
@@ -29,6 +29,7 @@ export default function Dashboard() {
   const [notifications, setNotifications] = useState([]);
   const [myAllTasks, setMyAllTasks] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingProposalsCount, setPendingProposalsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showSearch, setShowSearch] = useState(false);
   const [showPwModal, setShowPwModal] = useState(false);
@@ -213,6 +214,16 @@ export default function Dashboard() {
     setNotifications(notifs || []);
     setUnreadCount(notifs?.filter(n => !n.read).length || 0);
 
+    // Pending proposals count (cho KPI Dashboard)
+    try {
+      const { count: pendingCount } = await supabase
+        .from('proposals')
+        .select('id', { count: 'exact', head: true })
+        .eq('department', dept)
+        .eq('status', 'pending');
+      setPendingProposalsCount(pendingCount || 0);
+    } catch (e) { /* non-fatal */ }
+
     const { data: myAssignIds } = await supabase.from('task_assignees').select('task_id').eq('user_id', user.id);
     const { data: myWatchIds } = await supabase.from('task_watchers').select('task_id').eq('user_id', user.id);
     const idSet = new Set([
@@ -286,6 +297,170 @@ export default function Dashboard() {
   };
 
   const approvedTasks = tasks.filter(t => t.approval_status !== 'pending');
+
+  // ═══════════ EXECUTIVE DASHBOARD DATA ═══════════
+  const now = new Date();
+  const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const today0 = startOfDay(now);
+  const weekAgo = addDays(today0, -7);
+  const twoWeeksAgo = addDays(today0, -14);
+
+  // KPI data
+  const openTasks = parentTasks.filter(t => t.status !== 'done');
+  const openLastWeek = parentTasks.filter(t =>
+    t.status !== 'done' && t.created_at && new Date(t.created_at) <= weekAgo
+  );
+  const doneThisWeek = parentTasks.filter(t =>
+    t.status === 'done' && t.completed_at && new Date(t.completed_at) >= weekAgo
+  );
+  const donePrevWeek = parentTasks.filter(t =>
+    t.status === 'done' && t.completed_at &&
+    new Date(t.completed_at) >= twoWeeksAgo && new Date(t.completed_at) < weekAgo
+  );
+  const overdueTasks = parentTasks.filter(t =>
+    t.status !== 'done' && t.deadline && new Date(t.deadline) < now
+  );
+  const overdueLastWeek = parentTasks.filter(t =>
+    t.status !== 'done' && t.deadline && new Date(t.deadline) < weekAgo
+  );
+
+  // Sparkline: số task done mỗi ngày trong 10 ngày qua
+  const sparkDone = Array.from({ length: 10 }, (_, i) => {
+    const dayStart = addDays(today0, -(9 - i));
+    const dayEnd = addDays(dayStart, 1);
+    return parentTasks.filter(t => t.completed_at &&
+      new Date(t.completed_at) >= dayStart && new Date(t.completed_at) < dayEnd
+    ).length;
+  });
+  const sparkOpen = Array.from({ length: 10 }, (_, i) => {
+    const dayStart = addDays(today0, -(9 - i));
+    const dayEnd = addDays(dayStart, 1);
+    return parentTasks.filter(t => t.created_at &&
+      new Date(t.created_at) >= dayStart && new Date(t.created_at) < dayEnd
+    ).length;
+  });
+  const sparkOverdue = Array.from({ length: 10 }, (_, i) => {
+    const dayStart = addDays(today0, -(9 - i));
+    const dayEnd = addDays(dayStart, 1);
+    return parentTasks.filter(t => t.status !== 'done' && t.deadline &&
+      new Date(t.deadline) >= dayStart && new Date(t.deadline) < dayEnd
+    ).length;
+  });
+  const sparkProp = Array.from({ length: 10 }, (_, i) => Math.max(1, Math.round(pendingProposalsCount * (0.3 + 0.07 * i))));
+
+  // Delta calculation
+  const deltaDoneWeek = doneThisWeek.length - donePrevWeek.length;
+  const deltaDoneWeekPct = donePrevWeek.length > 0
+    ? Math.round((deltaDoneWeek / donePrevWeek.length) * 100)
+    : (doneThisWeek.length > 0 ? 100 : 0);
+  const deltaOpen = openTasks.length - openLastWeek.length;
+  const deltaOverdue = overdueTasks.length - overdueLastWeek.length;
+
+  // Focus list (top 5 task cần chú ý, ưu tiên pin + khẩn cấp)
+  const taskUrgency = (t) => {
+    if (t.status === 'done') return 99;
+    if (!t.deadline) return 50;
+    const diff = (new Date(t.deadline) - now) / 86400000;
+    if (diff < 0) return 0;   // overdue
+    if (diff < 1) return 10;  // today
+    if (diff < 7) return 20;  // this week
+    return 40;
+  };
+  const dueStateOf = (t) => {
+    if (!t.deadline) return 'default';
+    const diff = (new Date(t.deadline) - now) / 86400000;
+    if (t.status === 'done') return 'default';
+    if (diff < 0) return 'overdue';
+    if (diff < 1) return 'today';
+    if (diff < 7) return 'soon';
+    return 'default';
+  };
+  const focusTasks = [...parentTasks]
+    .filter(t => t.status !== 'done')
+    .sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return taskUrgency(a) - taskUrgency(b);
+    })
+    .slice(0, 5);
+  const focusCounts = {
+    overdue: focusTasks.filter(t => dueStateOf(t) === 'overdue').length,
+    today: focusTasks.filter(t => dueStateOf(t) === 'today').length,
+    week: focusTasks.filter(t => dueStateOf(t) === 'soon').length,
+  };
+
+  // Health score (0-100)
+  const doneAll = parentTasks.filter(t => t.status === 'done');
+  const doneOnTime = doneAll.filter(t => !t.deadline || !t.completed_at || new Date(t.completed_at) <= new Date(t.deadline));
+  const onTimeRate = doneAll.length > 0 ? Math.round((doneOnTime.length / doneAll.length) * 100) : 0;
+  const completionRate = parentTasks.length > 0 ? Math.round((doneAll.length / parentTasks.length) * 100) : 0;
+  const healthScore = Math.round(onTimeRate * 0.5 + completionRate * 0.5);
+  const healthTone = healthScore > 80 ? 'var(--accent)' : healthScore > 60 ? 'var(--warn)' : 'var(--danger)';
+  const healthLabel = healthScore > 80 ? 'Vận hành tốt' : healthScore > 60 ? 'Cần chú ý' : 'Cần cải thiện';
+
+  // Health vs last week
+  const doneAllLastWeek = parentTasks.filter(t => t.status === 'done' && t.completed_at && new Date(t.completed_at) < weekAgo);
+  const doneOTLast = doneAllLastWeek.filter(t => !t.deadline || new Date(t.completed_at) <= new Date(t.deadline));
+  const otRateLast = doneAllLastWeek.length > 0 ? Math.round((doneOTLast.length / doneAllLastWeek.length) * 100) : 0;
+  const compRateLast = parentTasks.length > 0 ? Math.round((doneAllLastWeek.length / parentTasks.length) * 100) : 0;
+  const healthLast = Math.round(otRateLast * 0.5 + compRateLast * 0.5);
+  const healthDelta = healthScore - healthLast;
+
+  // Assignee ranking (top 4 by completion rate)
+  const memberStats = (members || [])
+    .filter(m => m.department === dept && m.role !== 'director' && m.role !== 'accountant')
+    .map(m => {
+      const mine = parentTasks.filter(t => (t.assignees || []).some(a => a.user_id === m.id));
+      const done = mine.filter(t => t.status === 'done');
+      const rate = mine.length > 0 ? Math.round((done.length / mine.length) * 100) : 0;
+      return { id: m.id, name: m.name, avatar_color: m.avatar_color, done: done.length, total: mine.length, rate };
+    })
+    .filter(s => s.total > 0)
+    .sort((a, b) => b.rate - a.rate || b.done - a.done)
+    .slice(0, 4);
+
+  const firstName = (profile?.name || '').split(' ').slice(-1)[0] || profile?.name || '';
+  const roleGreeting = isDirector ? 'Giám đốc' : isAccountant ? 'Kế toán' : profile?.role === 'admin' ? 'Quản lý' : firstName;
+  const todayLabel = (() => {
+    const wk = ['Chủ nhật','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'];
+    const d = new Date();
+    const p = (n) => n < 10 ? '0' + n : '' + n;
+    return `${wk[d.getDay()]} · ${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()}`;
+  })();
+
+  // Components
+  const Sparkline = ({ bars, tone }) => (
+    <div className="h-[22px] mt-2.5 flex items-end gap-[2px]">
+      {bars.map((v, i) => {
+        const max = Math.max(...bars, 1);
+        const pct = Math.max(6, Math.round((v / max) * 100));
+        return (
+          <div key={i} className="flex-1 rounded-[1px]"
+            style={{ height: pct + '%', background: i === bars.length - 1 ? tone : 'var(--bg-soft)' }} />
+        );
+      })}
+    </div>
+  );
+  const DeltaBadge = ({ up, value }) => (
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium"
+      style={{ color: up ? 'var(--accent)' : 'var(--danger)' }}>
+      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        {up
+          ? <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+          : <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        }
+      </svg>
+      {value}
+    </span>
+  );
+  const AvatarChip = ({ m, size = 22 }) => (
+    <div className="rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0"
+      style={{ width: size, height: size, background: m?.avatar_color || '#E8F1EC', color: '#333', border: '2px solid #fff' }}
+      title={m?.name}>
+      {getInitials(m?.name)}
+    </div>
+  );
 
   const getInitials = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
   const ROLE_LABELS = { director: 'Tổng GĐ', admin: 'Quản lý', accountant: 'Kế toán', member: 'Nhân viên' };
@@ -381,9 +556,6 @@ export default function Dashboard() {
         }}>CG</div>
         <div className="leading-tight min-w-0">
           <div className="text-xs font-medium truncate" style={{ color: '#F5E7C3' }}>Coco Group</div>
-          <div className="text-[10px] font-mono truncate" style={{ color: 'rgba(232,211,162,.5)' }}>
-            {dept} · {canViewAll ? `${allBranchIds.length} chi nhánh` : `${allowedBranches.length} chi nhánh`}
-          </div>
         </div>
       </div>
     </>
@@ -585,18 +757,54 @@ export default function Dashboard() {
             <div className="max-w-[1280px] mx-auto px-4 lg:px-6 py-5">
               {tab === 'dashboard' && (
                 <div className="animate-fade-in">
-                  {/* KPI cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
+                  {/* Executive header */}
+                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
+                    <div>
+                      <div className="text-[11px] font-mono uppercase tracking-wider text-muted-ink">{todayLabel}</div>
+                      <div className="text-[22px] font-semibold mt-1 text-ink" style={{ letterSpacing: '-.015em' }}>Chào, {roleGreeting}.</div>
+                      <div className="text-[13px] text-ink-3 mt-0.5">
+                        Hôm nay có <b className="text-ink">{focusCounts.overdue + focusCounts.today} task</b> cần bạn để mắt
+                        {pendingProposalsCount > 0 && <> và <b className="text-ink">{pendingProposalsCount} đề xuất</b> đợi duyệt</>}.
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      {canViewReports && (
+                        <button
+                          onClick={() => setTab('performance')}
+                          className="px-3 py-2 rounded-lg text-xs font-medium hover:bg-bone-soft transition-colors"
+                          style={{ background: '#fff', border: '1px solid var(--line)', color: 'var(--ink-2)' }}
+                        >Xem báo cáo</button>
+                      )}
+                      {canCreateTask && (
+                        <button
+                          onClick={() => setTab('create')}
+                          className="px-3 py-2 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+                          style={{ background: 'var(--ink)', color: '#fff', border: '1px solid transparent' }}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                          Tạo task mới
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* KPI row with sparkline */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                     {[
-                      { l: 'Tổng',          v: stats.total,    c: 'var(--ink)' },
-                      { l: 'Đang làm',      v: stats.doing,    c: 'var(--accent)' },
-                      { l: 'Hoàn thành',    v: stats.done,     c: 'var(--accent)' },
-                      { l: 'Chờ phản hồi',  v: stats.waiting,  c: 'var(--warn)' },
-                      { l: 'Trễ hạn',       v: stats.overdue,  c: 'var(--danger)' },
-                    ].map(s => (
-                      <div key={s.l} className="card p-3.5">
-                        <p className="eyebrow">{s.l}</p>
-                        <p className="text-xl font-bold mt-1 font-mono" style={{ color: s.c, letterSpacing: '-.02em' }}>{s.v}</p>
+                      { l: 'Task đang mở',      v: openTasks.length,      d: deltaOpen,      pct: '', up: deltaOpen <= 0, tone: 'var(--accent)', bars: sparkOpen },
+                      { l: 'Hoàn thành tuần này', v: doneThisWeek.length,  d: deltaDoneWeek,  pct: deltaDoneWeekPct ? `${deltaDoneWeekPct > 0 ? '+' : ''}${deltaDoneWeekPct}%` : null, up: deltaDoneWeek >= 0, tone: 'var(--accent)', bars: sparkDone },
+                      { l: 'Trễ hạn',           v: overdueTasks.length,    d: deltaOverdue,   pct: '', up: deltaOverdue <= 0, tone: 'var(--danger)', bars: sparkOverdue },
+                      { l: 'Đề xuất chờ duyệt', v: pendingProposalsCount,   d: null,           pct: '', up: true, tone: 'var(--warn)', bars: sparkProp },
+                    ].map(k => (
+                      <div key={k.l} className="card p-3.5">
+                        <div className="eyebrow">{k.l}</div>
+                        <div className="flex items-end justify-between mt-2">
+                          <div className="text-[28px] font-semibold font-mono leading-none text-ink" style={{ letterSpacing: '-.02em' }}>{k.v}</div>
+                          {k.d !== null && (
+                            <DeltaBadge up={k.up} value={k.pct || (k.d > 0 ? `+${k.d}` : `${k.d}`)} />
+                          )}
+                        </div>
+                        <Sparkline bars={k.bars} tone={k.tone} />
                       </div>
                     ))}
                   </div>
@@ -645,13 +853,182 @@ export default function Dashboard() {
                       onOpenTask={(tid) => { changeViewMode('list'); setFocusTaskId(tid); }}
                     />
                   ) : (
-                    <TaskList tasks={approvedTasks} members={members} isAdmin={isDirector || isAccountant} isDirector={isDirector} canDeleteTask={canDeleteTask} canPinTasks={isAdmin || isAccountant} userId={user.id} onRefresh={fetchData} department={dept} currentUserRole={profile?.role} currentUserName={profile?.name} focusTaskId={focusTaskId} clearFocus={() => setFocusTaskId(null)} />
+                    <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-3">
+                      {/* Left: Focus list */}
+                      <div className="card overflow-hidden" style={{ padding: 0 }}>
+                        <div className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: '1px solid var(--line-2, var(--line))' }}>
+                          <div>
+                            <div className="text-[13px] font-semibold text-ink" style={{ letterSpacing: '-.005em' }}>Cần chú ý hôm nay</div>
+                            <div className="text-[11px] text-muted-ink mt-0.5">{focusTasks.length} task — xếp theo mức khẩn cấp</div>
+                          </div>
+                          <div className="hidden sm:flex gap-1.5">
+                            {focusCounts.overdue > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(181,68,58,.1)', color: 'var(--danger)' }}>
+                                <span className="w-1 h-1 rounded-full" style={{ background: 'var(--danger)' }} />
+                                Trễ {focusCounts.overdue}
+                              </span>
+                            )}
+                            {focusCounts.today > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(212,162,76,.12)', color: 'var(--warn)' }}>
+                                <span className="w-1 h-1 rounded-full" style={{ background: 'var(--warn)' }} />
+                                Hôm nay {focusCounts.today}
+                              </span>
+                            )}
+                            {focusCounts.week > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'var(--accent-soft, rgba(74,124,89,.12))', color: 'var(--accent)' }}>
+                                <span className="w-1 h-1 rounded-full" style={{ background: 'var(--accent)' }} />
+                                Tuần này {focusCounts.week}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          {focusTasks.length === 0 && (
+                            <div className="px-4 py-10 text-center text-xs text-muted-ink">
+                              Tuyệt vời! Không có task khẩn cấp nào. 🎉
+                            </div>
+                          )}
+                          {focusTasks.map((task, i) => {
+                            const state = dueStateOf(task);
+                            const dueTone = state === 'overdue' ? 'var(--danger)' : state === 'today' ? 'var(--warn)' : state === 'soon' ? 'var(--accent)' : 'var(--muted)';
+                            const dueBg = state === 'overdue' ? 'rgba(181,68,58,.08)' : state === 'today' ? 'rgba(212,162,76,.1)' : state === 'soon' ? 'var(--accent-soft, rgba(74,124,89,.1))' : 'var(--bg-soft)';
+                            const statusDotColor = task.status === 'done' ? 'var(--accent)' : task.status === 'doing' ? 'var(--accent)' : task.status === 'waiting' ? 'var(--warn)' : 'transparent';
+                            const statusDotBorder = task.status === 'todo' ? '1.5px solid var(--muted)' : 'none';
+                            const deadlineLabel = task.deadline
+                              ? (() => {
+                                  const d = new Date(task.deadline);
+                                  const diff = Math.round((d - now) / 86400000);
+                                  if (state === 'overdue') return `Trễ ${Math.abs(diff)}d`;
+                                  if (state === 'today') return 'Hôm nay';
+                                  if (diff === 1) return 'Ngày mai';
+                                  if (diff < 7) return `Còn ${diff}d`;
+                                  return `${d.getDate()}/${d.getMonth() + 1}`;
+                                })()
+                              : 'Chưa đặt';
+                            const assigneeMembers = (task.assignees || []).map(a => a.user || members.find(m => m.id === a.user_id)).filter(Boolean);
+                            return (
+                              <button
+                                key={task.id}
+                                onClick={() => { changeViewMode('kanban'); setFocusTaskId(task.id); }}
+                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-bone-soft transition-colors text-left"
+                                style={{
+                                  borderBottom: i === focusTasks.length - 1 ? 'none' : '1px solid var(--line-2, var(--line))',
+                                  background: task.pinned ? 'rgba(255,252,242,.6)' : 'transparent',
+                                }}
+                              >
+                                <div className="flex flex-col items-center gap-1 w-4 flex-shrink-0">
+                                  {task.pinned && (
+                                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--warn)' }}>
+                                      <path d="M12 2l2.39 7.36H22l-6.31 4.58L18.08 21 12 16.42 5.92 21l2.39-7.06L2 9.36h7.61L12 2z" />
+                                    </svg>
+                                  )}
+                                  <span className="w-2 h-2 rounded-full" style={{ background: statusDotColor, border: statusDotBorder }} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[13px] font-medium text-ink truncate">{task.title}</div>
+                                  <div className="flex items-center gap-2 mt-1 text-[11px] text-muted-ink font-mono">
+                                    <span>#{String(task.id).slice(0, 6)}</span>
+                                    {task.branch && <><span>·</span><span>{(dynamicBranches || NAIL_BRANCHES).find(b => b.id === task.branch)?.label || task.branch}</span></>}
+                                    {task.files && task.files.length > 0 && (
+                                      <><span>·</span><span className="inline-flex items-center gap-0.5">
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                                        {task.files.length}
+                                      </span></>
+                                    )}
+                                  </div>
+                                </div>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0" style={{ background: dueBg, color: dueTone }}>
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                  {deadlineLabel}
+                                </span>
+                                <div className="flex -space-x-1.5 flex-shrink-0">
+                                  {assigneeMembers.slice(0, 3).map((m, idx) => (
+                                    <AvatarChip key={m.id || idx} m={m} size={22} />
+                                  ))}
+                                  {assigneeMembers.length > 3 && (
+                                    <div className="w-[22px] h-[22px] rounded-full flex items-center justify-center text-[9px] font-semibold" style={{ background: 'var(--bg-soft)', color: 'var(--muted)', border: '2px solid #fff' }}>
+                                      +{assigneeMembers.length - 3}
+                                    </div>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="px-4 py-2.5 text-right" style={{ borderTop: '1px solid var(--line-2, var(--line))', background: 'var(--bg-soft)' }}>
+                          <button
+                            onClick={() => changeViewMode('kanban')}
+                            className="text-[11px] font-medium text-ink-2 hover:text-ink inline-flex items-center gap-1"
+                          >
+                            Xem toàn bộ task
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Right: Health + Ranking */}
+                      <div className="flex flex-col gap-3">
+                        {/* Health score */}
+                        <div className="card p-4">
+                          <div className="flex items-baseline justify-between mb-3">
+                            <div className="text-[13px] font-semibold text-ink" style={{ letterSpacing: '-.005em' }}>Điểm sức khoẻ</div>
+                            <div className="text-[11px] text-muted-ink font-mono">tuần này</div>
+                          </div>
+                          <div className="flex items-center gap-3.5">
+                            <svg width="72" height="72" viewBox="0 0 72 72" className="flex-shrink-0">
+                              <circle cx="36" cy="36" r="30" fill="none" stroke="var(--bg-soft)" strokeWidth="7" />
+                              <circle cx="36" cy="36" r="30" fill="none" stroke={healthTone} strokeWidth="7"
+                                strokeDasharray={`${(healthScore / 100) * 188} 188`} strokeLinecap="round"
+                                transform="rotate(-90 36 36)" />
+                              <text x="36" y="40" textAnchor="middle" fontSize="18" fontWeight="600" fill="var(--ink)">{healthScore}</text>
+                            </svg>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs text-ink-2 mb-1.5">
+                                {healthLabel}. Đúng hạn <b>{onTimeRate}%</b>, hoàn thành <b>{completionRate}%</b>.
+                              </div>
+                              <div className="text-[11px] text-muted-ink font-mono">
+                                <span style={{ color: healthDelta >= 0 ? 'var(--accent)' : 'var(--danger)' }}>
+                                  {healthDelta >= 0 ? '▲' : '▼'} {healthDelta >= 0 ? '+' : ''}{healthDelta}
+                                </span> so với tuần trước
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Assignee ranking */}
+                        <div className="card overflow-hidden" style={{ padding: 0 }}>
+                          <div className="px-4 pt-3.5 pb-2 flex items-baseline justify-between">
+                            <div className="text-[13px] font-semibold text-ink" style={{ letterSpacing: '-.005em' }}>Xếp hạng nhân sự</div>
+                            <div className="text-[11px] text-muted-ink font-mono">hoàn thành / giao</div>
+                          </div>
+                          {memberStats.length === 0 && (
+                            <div className="px-4 py-6 text-center text-xs text-muted-ink">Chưa có dữ liệu</div>
+                          )}
+                          {memberStats.map((p, i) => (
+                            <div key={p.id} className="flex items-center gap-2.5 px-4 py-2" style={{ borderTop: '1px solid var(--line-2, var(--line))' }}>
+                              <div className="w-3.5 text-[11px] text-muted-ink font-mono">#{i + 1}</div>
+                              <AvatarChip m={p} size={22} />
+                              <div className="flex-1 text-xs font-medium text-ink truncate">{p.name}</div>
+                              <div className="w-[60px] h-1 rounded-full overflow-hidden flex-shrink-0" style={{ background: 'var(--bg-soft)' }}>
+                                <div className="h-full rounded-full" style={{
+                                  width: p.rate + '%',
+                                  background: p.rate > 80 ? 'var(--accent)' : p.rate > 60 ? 'var(--accent)' : 'var(--warn)',
+                                }} />
+                              </div>
+                              <div className="text-[11px] font-mono text-ink-2 w-[46px] text-right flex-shrink-0">
+                                {p.done}/{p.total}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
-              {tab === 'create' && isAdmin && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
-              {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} profile={profile} isDirector={isDirector} isAccountant={isAccountant} canApprove={canApprove} focusProposalId={focusProposalId} clearFocus={() => setFocusProposalId(null)} />}
-              {tab === 'performance' && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isDirector || isAccountant} isDirector={isDirector} />}
+              {tab === 'create' && canCreateTask && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
+              {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} profile={profile} isDirector={isDirector} isAccountant={isAccountant} canApprove={canApprove} canApproveProposal={canApproveProposal} canDeleteProposal={canDeleteProposal} focusProposalId={focusProposalId} clearFocus={() => setFocusProposalId(null)} />}
+              {tab === 'performance' && canViewReports && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isDirector || isAccountant} isDirector={isDirector} />}
               {tab === 'mytasks' && <MyTasks tasks={myAllTasks} members={members} userId={user.id} onOpenTask={openTaskById} profileName={profile.name} />}
               {tab === 'notifications' && <Notifications notifications={notifications} userId={user.id} onRefresh={fetchData} onOpen={handleOpenNotification} />}
               {tab === 'admin' && (isDirector || canManageUsers) && (

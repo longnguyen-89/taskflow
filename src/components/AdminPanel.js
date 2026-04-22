@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { useAuth } from '@/contexts/AuthContext';
 import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
-import { ACTION_LABELS, ACTION_ICONS } from '@/lib/activityLog';
+import { ACTION_LABELS, ACTION_ICONS, logActivity, ACTIONS } from '@/lib/activityLog';
 import PriceHistorySection from '@/components/PriceHistory';
 import { BranchCompareSection, TrendChartSection, WorkHeatmapSection } from '@/components/Analytics';
 
@@ -33,7 +33,7 @@ const MENU = [
 
 export default function AdminPanel({ members, department, onRefresh, dynamicBranches, onBranchesChanged }) {
   const [section, setSection] = useState('users');
-  const { createUser, user: currentAuthUser, isDirector, resetPassword } = useAuth();
+  const { createUser, user: currentAuthUser, profile: currentProfile, isDirector, resetPassword } = useAuth();
 
   return (
     <div className="animate-fade-in">
@@ -64,7 +64,7 @@ export default function AdminPanel({ members, department, onRefresh, dynamicBran
         })}
       </div>
 
-      {section === 'users' && <UsersSection members={members} department={department} createUser={createUser} onRefresh={onRefresh} isDirector={isDirector} currentUserId={currentAuthUser?.id} resetPassword={resetPassword} />}
+      {section === 'users' && <UsersSection members={members} department={department} createUser={createUser} onRefresh={onRefresh} isDirector={isDirector} currentUserId={currentAuthUser?.id} currentUserName={currentProfile?.name} resetPassword={resetPassword} />}
       {section === 'branches' && <BranchesSection onBranchesChanged={onBranchesChanged} />}
       {section === 'permissions' && <PermissionsSection />}
       {section === 'groups' && <GroupsSection department={department} onRefresh={onRefresh} />}
@@ -80,7 +80,7 @@ export default function AdminPanel({ members, department, onRefresh, dynamicBran
   );
 }
 
-function UsersSection({ members, department, createUser, onRefresh, isDirector, currentUserId, resetPassword }) {
+function UsersSection({ members, department, createUser, onRefresh, isDirector, currentUserId, currentUserName, resetPassword }) {
   const [resetPwUserId, setResetPwUserId] = useState(null);
   const [resetPwValue, setResetPwValue] = useState('');
   const [resetPwLoading, setResetPwLoading] = useState(false);
@@ -88,9 +88,11 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
   async function handleResetPw() {
     if (!resetPwValue || resetPwValue.length < 6) { toast('Mật khẩu mới tối thiểu 6 ký tự', 'error'); return; }
     setResetPwLoading(true);
+    const targetUser = members.find(m => m.id === resetPwUserId);
     const { error } = await resetPassword(resetPwUserId, resetPwValue);
     setResetPwLoading(false);
     if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    logActivity({ userId: currentUserId, userName: currentUserName, action: ACTIONS.PASSWORD_RESET, targetType: 'user', targetId: resetPwUserId, targetTitle: targetUser?.name, department: targetUser?.department });
     toast('Đã reset mật khẩu!', 'success');
     setResetPwUserId(null); setResetPwValue('');
   }
@@ -110,6 +112,7 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
       });
       const data = await res.json();
       if (!res.ok) { toast('Lỗi: ' + data.error, 'error'); return; }
+      logActivity({ userId: currentUserId, userName: currentUserName, action: ACTIONS.USER_DELETED, targetType: 'user', targetId: m.id, targetTitle: m.name, details: { email: m.email, role: m.role }, department: m.department });
       toast(`Đã xoá ${m.name}`, 'success');
       onRefresh && onRefresh();
     } catch (e) {
@@ -147,8 +150,9 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
     if (needsBranch && userBranches.length === 0) return toast('Chọn ít nhất 1 chi nhánh', 'error');
     setSubmitting(true);
     const branchesToSave = needsBranch ? userBranches : null;
-    const { error } = await createUser(email.trim(), password, name.trim(), role, position, userDept, branchesToSave);
+    const { error, data } = await createUser(email.trim(), password, name.trim(), role, position, userDept, branchesToSave);
     if (error) { toast('Lỗi: ' + error.message, 'error'); setSubmitting(false); return; }
+    logActivity({ userId: currentUserId, userName: currentUserName, action: ACTIONS.USER_CREATED, targetType: 'user', targetId: data?.userId || null, targetTitle: name.trim(), details: { email: email.trim(), role, position }, department: userDept });
     toast(`Đã tạo tài khoản ${name}!`, 'success'); reset(); setSubmitting(false); onRefresh();
   }
 
