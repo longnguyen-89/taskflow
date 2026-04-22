@@ -1,9 +1,9 @@
-// Feature 20 â€” Bao cao tu dong CEO
-// GET /api/send-ceo-report?period=week â€” bao cao tuan (Mon 8am VN = 1am UTC)
-// GET /api/send-ceo-report?period=month â€” bao cao thang (day 1 8am VN)
+// Feature 20 — Bao cao tu dong CEO
+// GET /api/send-ceo-report?period=week — bao cao tuan (Mon 8am VN = 1am UTC)
+// GET /api/send-ceo-report?period=month — bao cao thang (day 1 8am VN)
 // Manual: POST tu admin panel (requesterId check)
 //
-// Tac vu: tong hop KPI toan cong ty (ca 2 department) â†’ notify tat ca director
+// Tac vu: tong hop KPI toan cong ty (ca 2 department) → notify tat ca director
 // + push web + (neu co RESEND_API_KEY thi send email)
 // + (neu co TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_IDS thi send Telegram bot)
 
@@ -58,13 +58,13 @@ function getPeriodRange(period) {
   return { start, end: now, prevStart, prevEnd };
 }
 
-function fmtMoney(v) { return new Intl.NumberFormat('vi-VN').format(v || 0) + 'Ä‘'; }
+function fmtMoney(v) { return new Intl.NumberFormat('vi-VN').format(v || 0) + 'đ'; }
 function trendArrow(cur, prev) {
-  if (prev === 0 && cur === 0) return 'â€”';
-  if (prev === 0) return 'ðŸ“ˆ +100%';
+  if (prev === 0 && cur === 0) return '—';
+  if (prev === 0) return '📈 +100%';
   const pct = Math.round((cur - prev) / prev * 100);
-  if (pct === 0) return 'â†’ khÃ´ng Ä‘á»•i';
-  return (pct > 0 ? 'ðŸ“ˆ +' : 'ðŸ“‰ ') + pct + '%';
+  if (pct === 0) return '→ không đổi';
+  return (pct > 0 ? '📈 +' : '📉 ') + pct + '%';
 }
 
 async function computeKPI(department, start, end, prevStart, prevEnd) {
@@ -125,28 +125,28 @@ async function computeKPI(department, start, end, prevStart, prevEnd) {
 
 function formatReportMessage(periodLabel, nail, hotel) {
   const lines = [];
-  lines.push('ðŸ“Š BÃO CÃO ' + periodLabel.toUpperCase() + ' â€” CCE Group');
+  lines.push('📊 BÁO CÁO ' + periodLabel.toUpperCase() + ' — CCE Group');
   lines.push('');
-  lines.push('ðŸŽ¨ NAIL (Coco Nail):');
-  lines.push(`  â€¢ Task: ${nail.done}/${nail.totalTasks} hoÃ n thÃ nh (${nail.rate}%) â€” ${trendArrow(nail.rate, nail.prevRate)} so vá»›i ${periodLabel} trÆ°á»›c`);
-  lines.push(`  â€¢ Trá»… háº¡n: ${nail.overdue} task ${nail.overdue < nail.prevOverdue ? '(giáº£m so vá»›i trÆ°á»›c)' : nail.overdue > nail.prevOverdue ? '(tÄƒng)' : ''}`);
-  lines.push(`  â€¢ Äá» xuáº¥t: ${nail.approved} duyá»‡t, ${nail.pending} chá»`);
-  lines.push(`  â€¢ Chi phÃ­ duyá»‡t: ${fmtMoney(nail.cost)} â€” ${trendArrow(nail.cost, nail.prevCost)}`);
-  lines.push(`  â€¢ Health Score: ${nail.health}/100 ${nail.health >= 75 ? 'âœ…' : nail.health >= 50 ? 'âš ï¸' : 'ðŸš¨'}`);
+  lines.push('🎨 NAIL (Coco Nail):');
+  lines.push(`  • Task: ${nail.done}/${nail.totalTasks} hoàn thành (${nail.rate}%) — ${trendArrow(nail.rate, nail.prevRate)} so với ${periodLabel} trước`);
+  lines.push(`  • Trễ hạn: ${nail.overdue} task ${nail.overdue < nail.prevOverdue ? '(giảm so với trước)' : nail.overdue > nail.prevOverdue ? '(tăng)' : ''}`);
+  lines.push(`  • Đề xuất: ${nail.approved} duyệt, ${nail.pending} chờ`);
+  lines.push(`  • Chi phí duyệt: ${fmtMoney(nail.cost)} — ${trendArrow(nail.cost, nail.prevCost)}`);
+  lines.push(`  • Health Score: ${nail.health}/100 ${nail.health >= 75 ? '✅' : nail.health >= 50 ? '⚠️' : '🚨'}`);
   lines.push('');
-  lines.push('ðŸ¨ HOTEL (Coco Ex):');
-  lines.push(`  â€¢ Task: ${hotel.done}/${hotel.totalTasks} hoÃ n thÃ nh (${hotel.rate}%) â€” ${trendArrow(hotel.rate, hotel.prevRate)}`);
-  lines.push(`  â€¢ Trá»… háº¡n: ${hotel.overdue} task`);
-  lines.push(`  â€¢ Äá» xuáº¥t: ${hotel.approved} duyá»‡t, ${hotel.pending} chá»`);
-  lines.push(`  â€¢ Chi phÃ­ duyá»‡t: ${fmtMoney(hotel.cost)} â€” ${trendArrow(hotel.cost, hotel.prevCost)}`);
-  lines.push(`  â€¢ Health Score: ${hotel.health}/100 ${hotel.health >= 75 ? 'âœ…' : hotel.health >= 50 ? 'âš ï¸' : 'ðŸš¨'}`);
+  lines.push('🏨 HOTEL (Coco Ex):');
+  lines.push(`  • Task: ${hotel.done}/${hotel.totalTasks} hoàn thành (${hotel.rate}%) — ${trendArrow(hotel.rate, hotel.prevRate)}`);
+  lines.push(`  • Trễ hạn: ${hotel.overdue} task`);
+  lines.push(`  • Đề xuất: ${hotel.approved} duyệt, ${hotel.pending} chờ`);
+  lines.push(`  • Chi phí duyệt: ${fmtMoney(hotel.cost)} — ${trendArrow(hotel.cost, hotel.prevCost)}`);
+  lines.push(`  • Health Score: ${hotel.health}/100 ${hotel.health >= 75 ? '✅' : hotel.health >= 50 ? '⚠️' : '🚨'}`);
   lines.push('');
   const totalTasks = nail.totalTasks + hotel.totalTasks;
   const totalDone = nail.done + hotel.done;
   const totalCost = nail.cost + hotel.cost;
   const totalRate = totalTasks > 0 ? Math.round(totalDone / totalTasks * 100) : 0;
-  lines.push('ðŸ¢ Tá»”NG:');
-  lines.push(`  â€¢ ${totalDone}/${totalTasks} task (${totalRate}%) â€¢ ${fmtMoney(totalCost)} chi phÃ­`);
+  lines.push('🏢 TỔNG:');
+  lines.push(`  • ${totalDone}/${totalTasks} task (${totalRate}%) • ${fmtMoney(totalCost)} chi phí`);
   return lines.join('\n');
 }
 
@@ -158,37 +158,37 @@ function formatReportHTML(periodLabel, nail, hotel) {
   const healthColor = h => h >= 75 ? '#16a34a' : h >= 50 ? '#d97706' : '#dc2626';
 
   return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>BÃ¡o cÃ¡o CEO</title></head>
+<html><head><meta charset="utf-8"><title>Báo cáo CEO</title></head>
 <body style="font-family:-apple-system,Arial,sans-serif;background:#f9fafb;padding:24px;color:#111">
 <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
-<h2 style="margin:0 0 4px 0;color:#123524">ðŸ“Š BÃ¡o cÃ¡o ${periodLabel} â€” CCE Group</h2>
-<p style="color:#6b7280;font-size:13px;margin:0 0 20px 0">Tá»•ng há»£p KPI tá»± Ä‘á»™ng â€¢ ${new Date().toLocaleString('vi-VN')}</p>
+<h2 style="margin:0 0 4px 0;color:#123524">📊 Báo cáo ${periodLabel} — CCE Group</h2>
+<p style="color:#6b7280;font-size:13px;margin:0 0 20px 0">Tổng hợp KPI tự động • ${new Date().toLocaleString('vi-VN')}</p>
 
-<h3 style="margin:20px 0 10px 0;color:#be185d">ðŸŽ¨ NAIL (Coco Nail)</h3>
+<h3 style="margin:20px 0 10px 0;color:#be185d">🎨 NAIL (Coco Nail)</h3>
 <table style="width:100%;border-collapse:collapse;font-size:13px">
-<tr><td style="padding:6px 0;color:#6b7280">Task hoÃ n thÃ nh</td><td style="text-align:right"><b>${nail.done}/${nail.totalTasks}</b> (${nail.rate}%) ${trendArrow(nail.rate, nail.prevRate)}</td></tr>
-<tr><td style="padding:6px 0;color:#6b7280">Trá»… háº¡n</td><td style="text-align:right"><b>${nail.overdue}</b> task</td></tr>
-<tr><td style="padding:6px 0;color:#6b7280">Äá» xuáº¥t duyá»‡t / chá»</td><td style="text-align:right"><b>${nail.approved}</b> / ${nail.pending}</td></tr>
-<tr><td style="padding:6px 0;color:#6b7280">Chi phÃ­ duyá»‡t</td><td style="text-align:right"><b>${fmtMoney(nail.cost)}</b> ${trendArrow(nail.cost, nail.prevCost)}</td></tr>
+<tr><td style="padding:6px 0;color:#6b7280">Task hoàn thành</td><td style="text-align:right"><b>${nail.done}/${nail.totalTasks}</b> (${nail.rate}%) ${trendArrow(nail.rate, nail.prevRate)}</td></tr>
+<tr><td style="padding:6px 0;color:#6b7280">Trễ hạn</td><td style="text-align:right"><b>${nail.overdue}</b> task</td></tr>
+<tr><td style="padding:6px 0;color:#6b7280">Đề xuất duyệt / chờ</td><td style="text-align:right"><b>${nail.approved}</b> / ${nail.pending}</td></tr>
+<tr><td style="padding:6px 0;color:#6b7280">Chi phí duyệt</td><td style="text-align:right"><b>${fmtMoney(nail.cost)}</b> ${trendArrow(nail.cost, nail.prevCost)}</td></tr>
 <tr><td style="padding:6px 0;color:#6b7280">Health Score</td><td style="text-align:right"><b style="color:${healthColor(nail.health)}">${nail.health}/100</b></td></tr>
 </table>
 
-<h3 style="margin:24px 0 10px 0;color:#2563eb">ðŸ¨ HOTEL (Coco Ex)</h3>
+<h3 style="margin:24px 0 10px 0;color:#2563eb">🏨 HOTEL (Coco Ex)</h3>
 <table style="width:100%;border-collapse:collapse;font-size:13px">
-<tr><td style="padding:6px 0;color:#6b7280">Task hoÃ n thÃ nh</td><td style="text-align:right"><b>${hotel.done}/${hotel.totalTasks}</b> (${hotel.rate}%) ${trendArrow(hotel.rate, hotel.prevRate)}</td></tr>
-<tr><td style="padding:6px 0;color:#6b7280">Trá»… háº¡n</td><td style="text-align:right"><b>${hotel.overdue}</b> task</td></tr>
-<tr><td style="padding:6px 0;color:#6b7280">Äá» xuáº¥t duyá»‡t / chá»</td><td style="text-align:right"><b>${hotel.approved}</b> / ${hotel.pending}</td></tr>
-<tr><td style="padding:6px 0;color:#6b7280">Chi phÃ­ duyá»‡t</td><td style="text-align:right"><b>${fmtMoney(hotel.cost)}</b> ${trendArrow(hotel.cost, hotel.prevCost)}</td></tr>
+<tr><td style="padding:6px 0;color:#6b7280">Task hoàn thành</td><td style="text-align:right"><b>${hotel.done}/${hotel.totalTasks}</b> (${hotel.rate}%) ${trendArrow(hotel.rate, hotel.prevRate)}</td></tr>
+<tr><td style="padding:6px 0;color:#6b7280">Trễ hạn</td><td style="text-align:right"><b>${hotel.overdue}</b> task</td></tr>
+<tr><td style="padding:6px 0;color:#6b7280">Đề xuất duyệt / chờ</td><td style="text-align:right"><b>${hotel.approved}</b> / ${hotel.pending}</td></tr>
+<tr><td style="padding:6px 0;color:#6b7280">Chi phí duyệt</td><td style="text-align:right"><b>${fmtMoney(hotel.cost)}</b> ${trendArrow(hotel.cost, hotel.prevCost)}</td></tr>
 <tr><td style="padding:6px 0;color:#6b7280">Health Score</td><td style="text-align:right"><b style="color:${healthColor(hotel.health)}">${hotel.health}/100</b></td></tr>
 </table>
 
 <div style="margin-top:24px;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0">
-<div style="font-size:12px;color:#14532d;margin-bottom:4px">ðŸ¢ Tá»”NG CÃ”NG TY</div>
-<div style="font-size:15px;font-weight:600">${totalDone}/${totalTasks} task (${totalRate}%) â€¢ ${fmtMoney(totalCost)} chi phÃ­</div>
+<div style="font-size:12px;color:#14532d;margin-bottom:4px">🏢 TỔNG CÔNG TY</div>
+<div style="font-size:15px;font-weight:600">${totalDone}/${totalTasks} task (${totalRate}%) • ${fmtMoney(totalCost)} chi phí</div>
 </div>
 
 <p style="margin-top:24px;font-size:11px;color:#9ca3af;text-align:center">
-<a href="https://cce-tasks.vercel.app/dashboard" style="color:#123524">Má»Ÿ dashboard â†’</a>
+<a href="https://cce-tasks.vercel.app/dashboard" style="color:#123524">Mở dashboard →</a>
 </p>
 </div>
 </body></html>`;
@@ -212,7 +212,7 @@ async function sendEmailResend(to, subject, html) {
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â• TELEGRAM BOT â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ TELEGRAM BOT ═══════════
 // Env: TELEGRAM_BOT_TOKEN (from @BotFather) + TELEGRAM_CHAT_IDS (csv)
 // Chat IDs: user/group/channel IDs. Get via https://api.telegram.org/bot<TOKEN>/getUpdates
 // sau khi CEO da nhan tin hoac add bot vao group.
@@ -244,31 +244,31 @@ function formatReportTelegram(periodLabel, nail, hotel) {
   const totalDone = nail.done + hotel.done;
   const totalCost = nail.cost + hotel.cost;
   const totalRate = totalTasks > 0 ? Math.round(totalDone / totalTasks * 100) : 0;
-  const healthIcon = h => h >= 75 ? 'âœ…' : h >= 50 ? 'âš ï¸' : 'ðŸš¨';
+  const healthIcon = h => h >= 75 ? '✅' : h >= 50 ? '⚠️' : '🚨';
   const ts = new Date().toLocaleString('vi-VN');
 
   // Telegram HTML parse mode: <b>, <i>, <u>, <s>, <code>, <pre>, <a href>
-  return `<b>ðŸ“Š BÃO CÃO ${periodLabel.toUpperCase()} â€” CCE Group</b>
+  return `<b>📊 BÁO CÁO ${periodLabel.toUpperCase()} — CCE Group</b>
 <i>${ts}</i>
 
-<b>ðŸŽ¨ NAIL (Coco Nail)</b>
-â€¢ Task: <b>${nail.done}/${nail.totalTasks}</b> (${nail.rate}%) ${trendArrow(nail.rate, nail.prevRate)}
-â€¢ Trá»… háº¡n: <b>${nail.overdue}</b> task
-â€¢ Äá» xuáº¥t: <b>${nail.approved}</b> duyá»‡t / ${nail.pending} chá»
-â€¢ Chi phÃ­: <b>${fmtMoney(nail.cost)}</b> ${trendArrow(nail.cost, nail.prevCost)}
-â€¢ Health: <b>${nail.health}/100</b> ${healthIcon(nail.health)}
+<b>🎨 NAIL (Coco Nail)</b>
+• Task: <b>${nail.done}/${nail.totalTasks}</b> (${nail.rate}%) ${trendArrow(nail.rate, nail.prevRate)}
+• Trễ hạn: <b>${nail.overdue}</b> task
+• Đề xuất: <b>${nail.approved}</b> duyệt / ${nail.pending} chờ
+• Chi phí: <b>${fmtMoney(nail.cost)}</b> ${trendArrow(nail.cost, nail.prevCost)}
+• Health: <b>${nail.health}/100</b> ${healthIcon(nail.health)}
 
-<b>ðŸ¨ HOTEL (Coco Ex)</b>
-â€¢ Task: <b>${hotel.done}/${hotel.totalTasks}</b> (${hotel.rate}%) ${trendArrow(hotel.rate, hotel.prevRate)}
-â€¢ Trá»… háº¡n: <b>${hotel.overdue}</b> task
-â€¢ Äá» xuáº¥t: <b>${hotel.approved}</b> duyá»‡t / ${hotel.pending} chá»
-â€¢ Chi phÃ­: <b>${fmtMoney(hotel.cost)}</b> ${trendArrow(hotel.cost, hotel.prevCost)}
-â€¢ Health: <b>${hotel.health}/100</b> ${healthIcon(hotel.health)}
+<b>🏨 HOTEL (Coco Ex)</b>
+• Task: <b>${hotel.done}/${hotel.totalTasks}</b> (${hotel.rate}%) ${trendArrow(hotel.rate, hotel.prevRate)}
+• Trễ hạn: <b>${hotel.overdue}</b> task
+• Đề xuất: <b>${hotel.approved}</b> duyệt / ${hotel.pending} chờ
+• Chi phí: <b>${fmtMoney(hotel.cost)}</b> ${trendArrow(hotel.cost, hotel.prevCost)}
+• Health: <b>${hotel.health}/100</b> ${healthIcon(hotel.health)}
 
-<b>ðŸ¢ Tá»”NG CÃ”NG TY</b>
-<b>${totalDone}/${totalTasks}</b> task (${totalRate}%) â€¢ <b>${fmtMoney(totalCost)}</b> chi phÃ­
+<b>🏢 TỔNG CÔNG TY</b>
+<b>${totalDone}/${totalTasks}</b> task (${totalRate}%) • <b>${fmtMoney(totalCost)}</b> chi phí
 
-<a href="https://cce-tasks.vercel.app/dashboard">Má»Ÿ dashboard â†’</a>`;
+<a href="https://cce-tasks.vercel.app/dashboard">Mở dashboard →</a>`;
 }
 
 export default async function handler(req, res) {
@@ -295,18 +295,18 @@ export default async function handler(req, res) {
       computeKPI('hotel', start, end, prevStart, prevEnd),
     ]);
 
-    const periodLabel = period === 'month' ? 'ThÃ¡ng' : 'Tuáº§n';
+    const periodLabel = period === 'month' ? 'Tháng' : 'Tuần';
     const message = formatReportMessage(periodLabel, nail, hotel);
     const html = formatReportHTML(periodLabel, nail, hotel);
     const telegramMsg = formatReportTelegram(periodLabel, nail, hotel);
-    const title = `ðŸ“Š BÃ¡o cÃ¡o ${periodLabel.toLowerCase()} â€” CCE Group`;
+    const title = `📊 Báo cáo ${periodLabel.toLowerCase()} — CCE Group`;
 
     // Short summary cho in-app card (1 dong)
     const totalTasks_ = nail.totalTasks + hotel.totalTasks;
     const totalDone_ = nail.done + hotel.done;
     const totalRate_ = totalTasks_ > 0 ? Math.round(totalDone_ / totalTasks_ * 100) : 0;
     const totalCost_ = nail.cost + hotel.cost;
-    const shortMessage = `${totalDone_}/${totalTasks_} task (${totalRate_}%) â€¢ ${fmtMoney(totalCost_)} chi phÃ­ â€¢ Click xem chi tiáº¿t`;
+    const shortMessage = `${totalDone_}/${totalTasks_} task (${totalRate_}%) • ${fmtMoney(totalCost_)} chi phí • Click xem chi tiết`;
 
     // Structured data cho notification card render
     const reportData = {
@@ -330,14 +330,14 @@ export default async function handler(req, res) {
 
     const notifyResults = [];
     for (const dir of (directors || [])) {
-      // In-app notification â€” type 'ceo_report' + structured data for rich card render
+      // In-app notification — type 'ceo_report' + structured data for rich card render
       await supabase.from('notifications').insert({
         user_id: dir.id, type: 'ceo_report',
         title, message: shortMessage,
         data: reportData,
       });
       // Push
-      const pushed = await sendPushToUser(dir.id, title, `${nail.done + hotel.done} task xong, ${fmtMoney(nail.cost + hotel.cost)} chi phÃ­`);
+      const pushed = await sendPushToUser(dir.id, title, `${nail.done + hotel.done} task xong, ${fmtMoney(nail.cost + hotel.cost)} chi phí`);
       // Email (if Resend key)
       let email = { skipped: true };
       if (dir.email) {
@@ -347,7 +347,7 @@ export default async function handler(req, res) {
     }
 
     // Telegram: gui cho tat ca chat_id trong TELEGRAM_CHAT_IDS (csv).
-    // Co the la personal chat, group, hoac channel â€” tuy CEO dang ky.
+    // Co the la personal chat, group, hoac channel — tuy CEO dang ky.
     const chatIds = (process.env.TELEGRAM_CHAT_IDS || '')
       .split(',').map(s => s.trim()).filter(Boolean);
     const telegramResults = [];

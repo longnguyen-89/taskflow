@@ -4,18 +4,18 @@ import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
 import { logActivity, ACTIONS } from '@/lib/activityLog';
 
-// Feature 7 â€” Kanban Board view
+// Feature 7 — Kanban Board view
 // 4 cot tuong ung 4 trang thai: Chua lam / Dang lam / Cho phan hoi / Hoan thanh
 // Drag-drop giua cac cot de doi trang thai. Pinned task luon len dau moi cot.
 
 const COLUMNS = [
-  { id: 'todo',    label: 'ChÆ°a lÃ m',       color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb' },
-  { id: 'doing',   label: 'Äang thá»±c hiá»‡n', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
-  { id: 'waiting', label: 'Chá» pháº£n há»“i',   color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
-  { id: 'done',    label: 'HoÃ n thÃ nh',     color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+  { id: 'todo',    label: 'Chưa làm',       color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb' },
+  { id: 'doing',   label: 'Đang thực hiện', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+  { id: 'waiting', label: 'Chờ phản hồi',   color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+  { id: 'done',    label: 'Hoàn thành',     color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
 ];
 
-const PR = { high: { l: 'Cao', c: '#dc2626' }, medium: { l: 'TB', c: '#d97706' }, low: { l: 'Tháº¥p', c: '#2563eb' } };
+const PR = { high: { l: 'Cao', c: '#dc2626' }, medium: { l: 'TB', c: '#d97706' }, low: { l: 'Thấp', c: '#2563eb' } };
 
 export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPinTasks, userId, onRefresh, department, currentUserName, onOpenTask }) {
   const [dragTaskId, setDragTaskId] = useState(null);
@@ -97,12 +97,12 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
     const u = { status: newStatus, updated_at: new Date().toISOString(), ...extra };
     if (newStatus === 'done') u.completed_at = new Date().toISOString();
     const { error } = await supabase.from('tasks').update(u).eq('id', taskId);
-    if (error) { toast('Lá»—i: ' + error.message, 'error'); return; }
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
 
     // Push notify creator
     if (task.created_by !== userId) {
       const col = COLUMNS.find(c => c.id === newStatus);
-      sendPush(task.created_by, col?.label || newStatus, (currentUserName || 'Ai Ä‘Ã³') + ' chuyá»ƒn "' + task.title + '" â†’ ' + (col?.label || newStatus), { url: '/dashboard', tag: 'status-' + taskId });
+      sendPush(task.created_by, col?.label || newStatus, (currentUserName || 'Ai đó') + ' chuyển "' + task.title + '" → ' + (col?.label || newStatus), { url: '/dashboard', tag: 'status-' + taskId });
     }
 
     // Activity log
@@ -115,12 +115,12 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
     });
 
     const col = COLUMNS.find(c => c.id === newStatus);
-    toast(col?.label || 'ÄÃ£ cáº­p nháº­t', 'success');
+    toast(col?.label || 'Đã cập nhật', 'success');
     onRefresh && onRefresh();
   }
 
   async function submitOverdueReason() {
-    if (!overdueReason) return toast('Vui lÃ²ng chá»n lÃ½ do', 'error');
+    if (!overdueReason) return toast('Vui lòng chọn lý do', 'error');
     const { taskId, status } = overdueModal;
     await applyStatusChange(taskId, status, {
       overdue_reason: overdueReason,
@@ -136,8 +136,8 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
     if (!canPinTasks) return;
     const newPinned = !task.pinned;
     const { error } = await supabase.from('tasks').update({ pinned: newPinned, updated_at: new Date().toISOString() }).eq('id', task.id);
-    if (error) { toast('Lá»—i: ' + error.message, 'error'); return; }
-    toast(newPinned ? 'ðŸ“Œ ÄÃ£ ghim task' : 'ÄÃ£ bá» ghim', 'success');
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    toast(newPinned ? '📌 Đã ghim task' : 'Đã bỏ ghim', 'success');
     onRefresh && onRefresh();
   }
 
@@ -172,7 +172,7 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
               <div className="p-2 space-y-2">
                 {tasksInCol.length === 0 && (
                   <div className="text-center py-8 text-[11px] text-gray-300 italic">
-                    {isDropTarget ? 'Tháº£ vÃ o Ä‘Ã¢y' : 'Trá»‘ng'}
+                    {isDropTarget ? 'Thả vào đây' : 'Trống'}
                   </div>
                 )}
                 {tasksInCol.map(t => {
@@ -189,10 +189,10 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
                       onDragEnd={onDragEnd}
                       onClick={() => onOpenTask && onOpenTask(t.id)}
                       className={`bg-white rounded-xl border p-2.5 cursor-pointer hover:shadow-sm transition-all ${isDragging ? 'opacity-40 scale-95' : ''} ${t.pinned ? 'border-l-[3px] border-l-amber-500' : od ? 'border-l-[3px] border-l-red-500' : 'border-gray-200'}`}
-                      title="KÃ©o Ä‘á»ƒ Ä‘á»•i tráº¡ng thÃ¡i, click Ä‘á»ƒ má»Ÿ chi tiáº¿t"
+                      title="Kéo để đổi trạng thái, click để mở chi tiết"
                     >
                       <div className="flex items-start gap-1.5 mb-1.5">
-                        {t.pinned && <span className="text-xs flex-shrink-0 mt-0.5" title="ÄÃ£ ghim">ðŸ“Œ</span>}
+                        {t.pinned && <span className="text-xs flex-shrink-0 mt-0.5" title="Đã ghim">📌</span>}
                         <p className={`text-xs font-semibold flex-1 leading-snug ${t.status === 'done' ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                           {t.title}
                         </p>
@@ -200,9 +200,9 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
                           <button
                             onClick={e => togglePin(e, t)}
                             className={`flex-shrink-0 text-[10px] w-4 h-4 rounded hover:bg-amber-50 transition-colors ${t.pinned ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}
-                            title={t.pinned ? 'Bá» ghim' : 'Ghim'}
+                            title={t.pinned ? 'Bỏ ghim' : 'Ghim'}
                           >
-                            {t.pinned ? 'ðŸ“Œ' : 'ðŸ“'}
+                            {t.pinned ? '📌' : '📍'}
                           </button>
                         )}
                       </div>
@@ -222,7 +222,7 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
                           </span>
                         )}
                         {t.files?.length > 0 && (
-                          <span className="text-[9px] text-gray-400">ðŸ“Ž{t.files.length}</span>
+                          <span className="text-[9px] text-gray-400">📎{t.files.length}</span>
                         )}
                       </div>
                       {assigneeNames && assigneeNames.length > 0 && (
@@ -257,28 +257,28 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
       </div>
 
       {parentTasks.length === 0 && (
-        <div className="card p-10 text-center text-gray-400 text-sm">ChÆ°a cÃ³ task</div>
+        <div className="card p-10 text-center text-gray-400 text-sm">Chưa có task</div>
       )}
 
       {/* Help text */}
       <div className="text-center text-[10px] text-gray-400 italic pt-1">
-        ðŸ’¡ KÃ©o-tháº£ task giá»¯a cÃ¡c cá»™t Ä‘á»ƒ Ä‘á»•i tráº¡ng thÃ¡i Â· Click task Ä‘á»ƒ má»Ÿ chi tiáº¿t trong tab List
+        💡 Kéo-thả task giữa các cột để đổi trạng thái · Click task để mở chi tiết trong tab List
       </div>
 
       {/* Overdue reason modal */}
       {overdueModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setOverdueModal(null)}>
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="text-base font-bold text-red-700 mb-1">âš  Task nÃ y Ä‘Ã£ trá»… háº¡n</h3>
-            <p className="text-xs text-gray-500 mb-3">Vui lÃ²ng chá»n lÃ½ do trá»… trÆ°á»›c khi Ä‘á»•i tráº¡ng thÃ¡i. Dá»¯ liá»‡u nÃ y phá»¥c vá»¥ bÃ¡o cÃ¡o cuá»‘i thÃ¡ng.</p>
+            <h3 className="text-base font-bold text-red-700 mb-1">⚠ Task này đã trễ hạn</h3>
+            <p className="text-xs text-gray-500 mb-3">Vui lòng chọn lý do trễ trước khi đổi trạng thái. Dữ liệu này phục vụ báo cáo cuối tháng.</p>
             <div className="space-y-1.5 mb-3">
               {[
-                'KhÃ´ng Ä‘á»§ thá»i gian',
-                'Thiáº¿u nguá»“n lá»±c / cÃ´ng cá»¥',
-                'Chá» pháº£n há»“i tá»« ngÆ°á»i khÃ¡c',
-                'Æ¯u tiÃªn viá»‡c kháº©n cáº¥p khÃ¡c',
-                'QuÃªn / sÃ³t viá»‡c',
-                'KhÃ¡c (ghi chÃº thÃªm bÃªn dÆ°á»›i)',
+                'Không đủ thời gian',
+                'Thiếu nguồn lực / công cụ',
+                'Chờ phản hồi từ người khác',
+                'Ưu tiên việc khẩn cấp khác',
+                'Quên / sót việc',
+                'Khác (ghi chú thêm bên dưới)',
               ].map(r => (
                 <label key={r} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs ${overdueReason === r ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:bg-gray-50'}`}>
                   <input type="radio" name="overdue-reason-kb" checked={overdueReason === r} onChange={() => setOverdueReason(r)} className="accent-emerald-600" />
@@ -289,13 +289,13 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
             <textarea
               className="input-field !text-xs w-full mb-3"
               rows={2}
-              placeholder="Ghi chÃº thÃªm (tÃ¹y chá»n)..."
+              placeholder="Ghi chú thêm (tùy chọn)..."
               value={overdueNote}
               onChange={e => setOverdueNote(e.target.value)}
             />
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setOverdueModal(null)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">Há»§y</button>
-              <button onClick={submitOverdueReason} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#123524' }}>XÃ¡c nháº­n & cáº­p nháº­t</button>
+              <button onClick={() => setOverdueModal(null)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">Hủy</button>
+              <button onClick={submitOverdueReason} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#123524' }}>Xác nhận & cập nhật</button>
             </div>
           </div>
         </div>

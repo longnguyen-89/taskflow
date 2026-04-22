@@ -1,10 +1,10 @@
-// Feature 10: Lá»‹ch sá»­ giÃ¡ - Theo dÃµi giÃ¡ mua cá»§a tá»«ng máº·t hÃ ng qua cÃ¡c Ä‘á» xuáº¥t.
-// PhÃ¡t hiá»‡n giÃ¡ tÄƒng/giáº£m báº¥t thÆ°á»ng (>20% so vá»›i giÃ¡ trung bÃ¬nh).
+// Feature 10: Lịch sử giá - Theo dõi giá mua của từng mặt hàng qua các đề xuất.
+// Phát hiện giá tăng/giảm bất thường (>20% so với giá trung bình).
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { branchLabel } from '@/lib/branches';
 
-// Chuáº©n hoÃ¡ tÃªn máº·t hÃ ng: lowercase, bá» dáº¥u, trim, thu gá»n space.
+// Chuẩn hoá tên mặt hàng: lowercase, bỏ dấu, trim, thu gọn space.
 function normalizeName(s) {
   return (s || '')
     .normalize('NFD')
@@ -15,8 +15,8 @@ function normalizeName(s) {
 }
 
 function fmtVND(n) {
-  if (!n && n !== 0) return 'â€”';
-  return Number(n).toLocaleString('de-DE') + 'â‚«';
+  if (!n && n !== 0) return '—';
+  return Number(n).toLocaleString('de-DE') + '₫';
 }
 
 function fmtDate(d) {
@@ -25,14 +25,14 @@ function fmtDate(d) {
   return dt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-// Tráº£ vá» category + mÃ u cho má»©c chÃªnh lá»‡ch so vá»›i avg.
+// Trả về category + màu cho mức chênh lệch so với avg.
 function priceClassify(latest, avg) {
-  if (!avg || !latest) return { kind: 'unknown', color: '#9ca3af', label: 'â€”', pct: null };
+  if (!avg || !latest) return { kind: 'unknown', color: '#9ca3af', label: '—', pct: null };
   const pct = ((latest - avg) / avg) * 100;
-  if (pct > 50) return { kind: 'spike', color: '#dc2626', label: 'TÄƒng máº¡nh', pct };
-  if (pct > 20) return { kind: 'up', color: '#ea580c', label: 'TÄƒng', pct };
-  if (pct < -20) return { kind: 'down', color: '#16a34a', label: 'Giáº£m', pct };
-  return { kind: 'normal', color: '#6b7280', label: 'BÃ¬nh thÆ°á»ng', pct };
+  if (pct > 50) return { kind: 'spike', color: '#dc2626', label: 'Tăng mạnh', pct };
+  if (pct > 20) return { kind: 'up', color: '#ea580c', label: 'Tăng', pct };
+  if (pct < -20) return { kind: 'down', color: '#16a34a', label: 'Giảm', pct };
+  return { kind: 'normal', color: '#6b7280', label: 'Bình thường', pct };
 }
 
 export default function PriceHistorySection({ department }) {
@@ -59,12 +59,12 @@ export default function PriceHistorySection({ department }) {
     setLoading(false);
   }
 
-  // Gá»™p táº¥t cáº£ items theo tÃªn Ä‘Ã£ chuáº©n hoÃ¡.
+  // Gộp tất cả items theo tên đã chuẩn hoá.
   const itemGroups = useMemo(() => {
     const groups = new Map();
     for (const p of proposals) {
-      // Chá»‰ tÃ­nh Ä‘á» xuáº¥t Mua hÃ ng (loáº¡i trá»« Thanh toÃ¡n).
-      if (p.category_name === 'Thanh toÃ¡n') continue;
+      // Chỉ tính đề xuất Mua hàng (loại trừ Thanh toán).
+      if (p.category_name === 'Thanh toán') continue;
       if (filterStatus === 'approved' && p.status !== 'approved') continue;
       if (filterStatus === 'pending' && p.status !== 'pending') continue;
       const items = Array.isArray(p.items) ? p.items : [];
@@ -84,7 +84,7 @@ export default function PriceHistorySection({ department }) {
         groups.get(key).entries.push({
           proposalId: p.id,
           proposalTitle: p.title,
-          creator: p.creator?.name || 'â€”',
+          creator: p.creator?.name || '—',
           status: p.status,
           branch: p.branch,
           category: p.category_name,
@@ -96,7 +96,7 @@ export default function PriceHistorySection({ department }) {
         });
       }
     }
-    // TÃ­nh stats cho má»—i group
+    // Tính stats cho mỗi group
     const list = [];
     for (const g of groups.values()) {
       g.entries.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -131,7 +131,7 @@ export default function PriceHistorySection({ department }) {
     }
     switch (sortBy) {
       case 'abnormal':
-        // TÄƒng máº¡nh -> tÄƒng -> giáº£m -> bÃ¬nh thÆ°á»ng
+        // Tăng mạnh -> tăng -> giảm -> bình thường
         const rank = { spike: 0, up: 1, down: 2, normal: 3, unknown: 4 };
         arr = [...arr].sort((a, b) => {
           const ra = rank[a.classify.kind] ?? 5;
@@ -159,26 +159,26 @@ export default function PriceHistorySection({ department }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-sm">Lá»‹ch sá»­ giÃ¡ mua hÃ ng</h3>
+        <h3 className="font-semibold text-sm">Lịch sử giá mua hàng</h3>
         <button onClick={fetchProposals} className="text-[11px] text-gray-500 hover:text-gray-700">
-          {loading ? 'Äang táº£i...' : 'â†» LÃ m má»›i'}
+          {loading ? 'Đang tải...' : '↻ Làm mới'}
         </button>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="card p-3">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Máº·t hÃ ng theo dÃµi</p>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Mặt hàng theo dõi</p>
           <p className="text-xl font-bold mt-1" style={{ color: '#123524' }}>{trackedCount}</p>
         </div>
         <div className="card p-3">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">GiÃ¡ tÄƒng báº¥t thÆ°á»ng</p>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Giá tăng bất thường</p>
           <p className="text-xl font-bold mt-1" style={{ color: abnormalCount > 0 ? '#dc2626' : '#16a34a' }}>
             {abnormalCount}
           </p>
         </div>
         <div className="card p-3">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Äá» xuáº¥t Ä‘Ã£ duyá»‡t</p>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Đề xuất đã duyệt</p>
           <p className="text-xl font-bold mt-1 text-gray-700">
             {proposals.filter(p => p.status === 'approved').length}
           </p>
@@ -189,31 +189,31 @@ export default function PriceHistorySection({ department }) {
       <div className="flex gap-2 mb-3 flex-wrap items-center">
         <input
           type="text"
-          placeholder="ðŸ” TÃ¬m máº·t hÃ ng..."
+          placeholder="🔍 Tìm mặt hàng..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="input-field !py-1.5 !text-xs flex-1 min-w-[180px]"
         />
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
           className="input-field !py-1.5 !text-xs !w-auto">
-          <option value="all">Táº¥t cáº£ tráº¡ng thÃ¡i</option>
-          <option value="approved">ÄÃ£ duyá»‡t</option>
-          <option value="pending">Äang chá»</option>
+          <option value="all">Tất cả trạng thái</option>
+          <option value="approved">Đã duyệt</option>
+          <option value="pending">Đang chờ</option>
         </select>
         <select value={sortBy} onChange={e => setSortBy(e.target.value)}
           className="input-field !py-1.5 !text-xs !w-auto">
-          <option value="abnormal">Báº¥t thÆ°á»ng trÆ°á»›c</option>
-          <option value="recent">Gáº§n Ä‘Ã¢y nháº¥t</option>
-          <option value="count">Nhiá»u láº§n mua</option>
-          <option value="name">TÃªn A-Z</option>
+          <option value="abnormal">Bất thường trước</option>
+          <option value="recent">Gần đây nhất</option>
+          <option value="count">Nhiều lần mua</option>
+          <option value="name">Tên A-Z</option>
         </select>
       </div>
 
       {loading ? (
-        <div className="card p-8 text-center text-sm text-gray-400">Äang táº£i...</div>
+        <div className="card p-8 text-center text-sm text-gray-400">Đang tải...</div>
       ) : filteredGroups.length === 0 ? (
         <div className="card p-8 text-center text-sm text-gray-400">
-          {search ? 'KhÃ´ng tÃ¬m tháº¥y máº·t hÃ ng nÃ o' : 'ChÆ°a cÃ³ dá»¯ liá»‡u giÃ¡ mua hÃ ng'}
+          {search ? 'Không tìm thấy mặt hàng nào' : 'Chưa có dữ liệu giá mua hàng'}
         </div>
       ) : (
         <div className="space-y-1.5">
@@ -227,7 +227,7 @@ export default function PriceHistorySection({ department }) {
                   onClick={() => setExpandedKey(isExp ? null : g.key)}>
                   <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-base"
                     style={{ background: g.classify.color + '20' }}>
-                    {g.classify.kind === 'spike' ? 'ðŸš¨' : g.classify.kind === 'up' ? 'ðŸ“ˆ' : g.classify.kind === 'down' ? 'ðŸ“‰' : 'ðŸ“¦'}
+                    {g.classify.kind === 'spike' ? '🚨' : g.classify.kind === 'up' ? '📈' : g.classify.kind === 'down' ? '📉' : '📦'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -236,13 +236,13 @@ export default function PriceHistorySection({ department }) {
                         {g.classify.label} {pctStr}
                       </span>
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
-                        {g.count} láº§n
+                        {g.count} lần
                       </span>
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-500 flex-wrap">
-                      <span>Gáº§n nháº¥t: <strong className="text-gray-700">{fmtVND(g.latest)}</strong></span>
+                      <span>Gần nhất: <strong className="text-gray-700">{fmtVND(g.latest)}</strong></span>
                       <span>TB: {fmtVND(Math.round(g.avg))}</span>
-                      <span>Min-Max: {fmtVND(g.min)} â†’ {fmtVND(g.max)}</span>
+                      <span>Min-Max: {fmtVND(g.min)} → {fmtVND(g.max)}</span>
                     </div>
                   </div>
                   <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExp ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -254,7 +254,7 @@ export default function PriceHistorySection({ department }) {
                 {isExp && (
                   <div className="border-t border-gray-100 bg-gray-50/60 p-3">
                     <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                      Lá»‹ch sá»­ mua ({g.entries.length} láº§n)
+                      Lịch sử mua ({g.entries.length} lần)
                     </p>
                     <div className="space-y-1.5">
                       {g.entries.map((e, idx) => {
@@ -270,18 +270,18 @@ export default function PriceHistorySection({ department }) {
                               </p>
                               <div className="flex items-center gap-2 text-[9px] text-gray-500 mt-0.5">
                                 <span>{e.creator}</span>
-                                {e.branch && <span>Â· {branchLabel(e.branch)}</span>}
+                                {e.branch && <span>· {branchLabel(e.branch)}</span>}
                                 <span className={`px-1 rounded ${e.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : e.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
-                                  {e.status === 'approved' ? 'Duyá»‡t' : e.status === 'rejected' ? 'Tá»« chá»‘i' : 'Chá»'}
+                                  {e.status === 'approved' ? 'Duyệt' : e.status === 'rejected' ? 'Từ chối' : 'Chờ'}
                                 </span>
-                                {e.quantity ? <span>Â· SL: {e.quantity} {e.unit}</span> : null}
+                                {e.quantity ? <span>· SL: {e.quantity} {e.unit}</span> : null}
                               </div>
                             </div>
                             <div className="flex-shrink-0 text-right">
                               <p className="font-bold text-gray-800">{fmtVND(e.price)}</p>
                               {changePct != null && Math.abs(changePct) >= 0.5 && (
                                 <p className="text-[9px] font-semibold" style={{ color: changeColor }}>
-                                  {changePct > 0 ? 'â–²' : 'â–¼'} {Math.abs(changePct).toFixed(0)}%
+                                  {changePct > 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(0)}%
                                 </p>
                               )}
                             </div>
@@ -298,7 +298,7 @@ export default function PriceHistorySection({ department }) {
       )}
 
       <p className="text-[10px] text-gray-400 mt-3 text-center">
-        ðŸ’¡ GiÃ¡ Ä‘Æ°á»£c gáº¯n nhÃ£n "TÄƒng báº¥t thÆ°á»ng" khi giÃ¡ mua gáº§n nháº¥t vÆ°á»£t quÃ¡ 20% so vá»›i giÃ¡ trung bÃ¬nh.
+        💡 Giá được gắn nhãn "Tăng bất thường" khi giá mua gần nhất vượt quá 20% so với giá trung bình.
       </p>
     </div>
   );

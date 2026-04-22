@@ -1,20 +1,20 @@
-// MyTasks.js â€” "CÃ´ng viá»‡c tÃ´i": táº¥t cáº£ task liÃªn quan Ä‘áº¿n user, nhÃ³m theo ngÃ y deadline.
-// Click 1 task -> gá»i onOpenTask Ä‘á»ƒ dashboard focus & expand task Ä‘Ã³ trong tab Dashboard.
+// MyTasks.js — "Công việc tôi": tất cả task liên quan đến user, nhóm theo ngày deadline.
+// Click 1 task -> gọi onOpenTask để dashboard focus & expand task đó trong tab Dashboard.
 import { useState, useMemo } from 'react';
 
 const ST = {
-  todo: { l: 'ChÆ°a lÃ m', c: '#6b7280' },
-  doing: { l: 'Äang lÃ m', c: '#2563eb' },
+  todo: { l: 'Chưa làm', c: '#6b7280' },
+  doing: { l: 'Đang làm', c: '#2563eb' },
   done: { l: 'Xong', c: '#16a34a' },
-  waiting: { l: 'Chá»', c: '#d97706' },
+  waiting: { l: 'Chờ', c: '#d97706' },
 };
-const PR = { high: { l: 'Cao', c: '#dc2626' }, medium: { l: 'TB', c: '#d97706' }, low: { l: 'Tháº¥p', c: '#2563eb' } };
+const PR = { high: { l: 'Cao', c: '#dc2626' }, medium: { l: 'TB', c: '#d97706' }, low: { l: 'Thấp', c: '#2563eb' } };
 
-// YYYY-MM-DD theo giá» Viá»‡t Nam
+// YYYY-MM-DD theo giờ Việt Nam
 function ymdVN(d) {
   if (!d) return null;
   const x = new Date(d);
-  // Shift sang UTC+7 rá»“i láº¥y UTC date
+  // Shift sang UTC+7 rồi lấy UTC date
   const vn = new Date(x.getTime() + 7 * 60 * 60 * 1000);
   return vn.toISOString().slice(0, 10);
 }
@@ -35,8 +35,8 @@ function fmtDateLong(d) {
 export default function MyTasks({ tasks, members, userId, onOpenTask, profileName }) {
   const [filter, setFilter] = useState('all'); // all | active | done
 
-  // Lá»c task liÃªn quan Ä‘áº¿n user: assignee / watcher / creator.
-  // Bá» task Ä‘ang chá» duyá»‡t Ä‘á»ƒ giá»‘ng Dashboard.
+  // Lọc task liên quan đến user: assignee / watcher / creator.
+  // Bỏ task đang chờ duyệt để giống Dashboard.
   const mine = useMemo(() => {
     return (tasks || []).filter(t =>
       t.approval_status !== 'pending' &&
@@ -64,7 +64,7 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
     return mine;
   }, [mine, filter]);
 
-  // NhÃ³m theo ngÃ y deadline (YYYY-MM-DD VN)
+  // Nhóm theo ngày deadline (YYYY-MM-DD VN)
   const groups = useMemo(() => {
     const today = todayVN();
     const tomorrow = addDaysVN(1);
@@ -82,11 +82,11 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
       else map.later.push(t);
     }
 
-    // Sort tá»«ng nhÃ³m theo deadline tÄƒng dáº§n
+    // Sort từng nhóm theo deadline tăng dần
     const byDl = (a, b) => new Date(a.deadline || 0) - new Date(b.deadline || 0);
     Object.keys(map).forEach(k => map[k].sort(byDl));
 
-    // Trong nhÃ³m week/later, chia nhá» theo ngÃ y Ä‘á»ƒ header hiá»ƒn thá»‹ ngÃ y rÃµ rÃ ng
+    // Trong nhóm week/later, chia nhỏ theo ngày để header hiển thị ngày rõ ràng
     function groupByDay(list) {
       const acc = {};
       for (const t of list) {
@@ -111,9 +111,9 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
     const isAssignee = t.assignees?.some(a => a.user_id === userId);
     const isWatcher = t.watchers?.some(w => w.user_id === userId);
     const isCreator = t.created_by === userId;
-    if (isAssignee) return { l: 'ÄÆ°á»£c giao', c: '#123524', bg: '#e8f5ee' };
-    if (isCreator) return { l: 'TÃ´i giao', c: '#7c3aed', bg: '#f3e8ff' };
-    if (isWatcher) return { l: 'Theo dÃµi', c: '#2563eb', bg: '#dbeafe' };
+    if (isAssignee) return { l: 'Được giao', c: '#123524', bg: '#e8f5ee' };
+    if (isCreator) return { l: 'Tôi giao', c: '#7c3aed', bg: '#f3e8ff' };
+    if (isWatcher) return { l: 'Theo dõi', c: '#2563eb', bg: '#dbeafe' };
     return { l: '', c: '', bg: '' };
   }
 
@@ -151,18 +151,18 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
   return (
     <div className="animate-fade-in space-y-4">
       <div>
-        <h2 className="font-display font-bold text-lg" style={{ color: '#123524' }}>CÃ´ng viá»‡c tÃ´i</h2>
-        <p className="text-[11px] text-gray-500">Táº¥t cáº£ task liÃªn quan Ä‘áº¿n {profileName || 'báº¡n'} â€” nhÃ³m theo háº¡n hoÃ n thÃ nh.</p>
+        <h2 className="font-display font-bold text-lg" style={{ color: '#123524' }}>Công việc tôi</h2>
+        <p className="text-[11px] text-gray-500">Tất cả task liên quan đến {profileName || 'bạn'} — nhóm theo hạn hoàn thành.</p>
       </div>
 
       {/* KPI */}
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
         {[
-          { l: 'Tá»•ng', v: stats.total, c: '#1a1a1a' },
-          { l: 'Äang lÃ m', v: stats.doing, c: '#2563eb' },
-          { l: 'ChÆ°a lÃ m', v: stats.todo, c: '#6b7280' },
+          { l: 'Tổng', v: stats.total, c: '#1a1a1a' },
+          { l: 'Đang làm', v: stats.doing, c: '#2563eb' },
+          { l: 'Chưa làm', v: stats.todo, c: '#6b7280' },
           { l: 'Xong', v: stats.done, c: '#16a34a' },
-          { l: 'Trá»… háº¡n', v: stats.overdue, c: '#dc2626' },
+          { l: 'Trễ hạn', v: stats.overdue, c: '#dc2626' },
         ].map(s => (
           <div key={s.l} className="bg-white rounded-xl p-2.5 sm:p-3 border border-gray-100">
             <p className="text-[9px] sm:text-[10px] text-gray-500 uppercase tracking-wide">{s.l}</p>
@@ -174,9 +174,9 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
       {/* Filter */}
       <div className="flex p-0.5 rounded-lg w-fit" style={{ background: '#F3EFE4' }}>
         {[
-          { id: 'all', l: 'Táº¥t cáº£' },
-          { id: 'active', l: 'Äang / ChÆ°a lÃ m' },
-          { id: 'done', l: 'ÄÃ£ xong' },
+          { id: 'all', l: 'Tất cả' },
+          { id: 'active', l: 'Đang / Chưa làm' },
+          { id: 'done', l: 'Đã xong' },
         ].map(f => (
           <button key={f.id} onClick={() => setFilter(f.id)}
             className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${filter === f.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
@@ -186,20 +186,20 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
       </div>
 
       {filtered.length === 0 ? (
-        <div className="card p-10 text-center text-gray-400 text-sm">ðŸŽ‰ KhÃ´ng cÃ³ task nÃ o trong má»¥c nÃ y</div>
+        <div className="card p-10 text-center text-gray-400 text-sm">🎉 Không có task nào trong mục này</div>
       ) : (
         <div className="space-y-4">
-          <Section title="âš  Trá»… háº¡n" color="#dc2626" list={groups.overdue} />
-          <Section title="ðŸ”¥ HÃ´m nay" color="#d97706" list={groups.today} />
-          <Section title="â­ NgÃ y mai" color="#2563eb" list={groups.tomorrow} />
+          <Section title="⚠ Trễ hạn" color="#dc2626" list={groups.overdue} />
+          <Section title="🔥 Hôm nay" color="#d97706" list={groups.today} />
+          <Section title="⏭ Ngày mai" color="#2563eb" list={groups.tomorrow} />
           {groups.weekByDay.map(([day, list]) => (
-            <Section key={'w' + day} title={`ðŸ“… ${fmtDateLong(day + 'T12:00:00Z')}`} color="#123524" list={list} />
+            <Section key={'w' + day} title={`📅 ${fmtDateLong(day + 'T12:00:00Z')}`} color="#123524" list={list} />
           ))}
           {groups.laterByDay.map(([day, list]) => (
-            <Section key={'l' + day} title={`ðŸ“† ${fmtDateLong(day + 'T12:00:00Z')}`} color="#6b7280" list={list} />
+            <Section key={'l' + day} title={`📆 ${fmtDateLong(day + 'T12:00:00Z')}`} color="#6b7280" list={list} />
           ))}
-          <Section title="â“ KhÃ´ng cÃ³ háº¡n" color="#6b7280" list={groups.noDl} />
-          <Section title="âœ… ÄÃ£ hoÃ n thÃ nh" color="#16a34a" list={groups.done} />
+          <Section title="❓ Không có hạn" color="#6b7280" list={groups.noDl} />
+          <Section title="✅ Đã hoàn thành" color="#16a34a" list={groups.done} />
         </div>
       )}
     </div>
