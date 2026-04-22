@@ -5,17 +5,17 @@ import { sendPush } from '@/lib/notify';
 import { deleteTaskCascade } from '@/lib/deletions';
 import { logActivity, ACTIONS } from '@/lib/activityLog';
 
-const ST = { todo: { l: 'Chưa làm', c: '#6b7280' }, doing: { l: 'Đang thực hiện', c: '#2563eb' }, done: { l: 'Hoàn thành', c: '#16a34a' }, waiting: { l: 'Chờ phản hồi', c: '#d97706' } };
-const PR = { high: { l: 'Cao', c: '#dc2626' }, medium: { l: 'TB', c: '#d97706' }, low: { l: 'Thấp', c: '#2563eb' } };
+const ST = { todo: { l: 'ChÆ°a lÃ m', c: '#6b7280' }, doing: { l: 'Äang thá»±c hiá»‡n', c: '#2563eb' }, done: { l: 'HoÃ n thÃ nh', c: '#16a34a' }, waiting: { l: 'Chá» pháº£n há»“i', c: '#d97706' } };
+const PR = { high: { l: 'Cao', c: '#dc2626' }, medium: { l: 'TB', c: '#d97706' }, low: { l: 'Tháº¥p', c: '#2563eb' } };
 
 function getFileIcon(name) {
   const ext = (name || '').toLowerCase();
-  if (ext.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/)) return '🖼';
-  if (ext.match(/\.pdf$/)) return '📄';
-  if (ext.match(/\.(doc|docx)$/)) return '📝';
-  if (ext.match(/\.(xls|xlsx|csv)$/)) return '📊';
-  if (ext.match(/\.(ppt|pptx)$/)) return '📽';
-  return '📎';
+  if (ext.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/)) return 'ðŸ–¼';
+  if (ext.match(/\.pdf$/)) return 'ðŸ“„';
+  if (ext.match(/\.(doc|docx)$/)) return 'ðŸ“';
+  if (ext.match(/\.(xls|xlsx|csv)$/)) return 'ðŸ“Š';
+  if (ext.match(/\.(ppt|pptx)$/)) return 'ðŸ“½';
+  return 'ðŸ“Ž';
 }
 
 function formatFileSize(bytes) {
@@ -27,16 +27,16 @@ function formatFileSize(bytes) {
 
 export default function TaskList({ tasks, members, isAdmin, isDirector, canDeleteTask, canPinTasks, userId, onRefresh, department, currentUserRole, currentUserName, focusTaskId, clearFocus }) {
 
-  // Xoá task cứng (TGĐ hoặc Admin có quyền). Có confirm 2 bước.
+  // XoÃ¡ task cá»©ng (TGÄ hoáº·c Admin cÃ³ quyá»n). CÃ³ confirm 2 bÆ°á»›c.
   async function deleteTask(taskId, taskTitle) {
     if (!canDeleteTask && !isDirector) return;
     const ok = typeof window !== 'undefined' && window.confirm(
-      `⚠ XOÁ VĨNH VIỄN task này?\n\n"${taskTitle}"\n\nSẽ xoá cả: sub-task, comment, file đính kèm, checklist, lịch sử. KHÔNG thể khôi phục.`
+      `âš  XOÃ VÄ¨NH VIá»„N task nÃ y?\n\n"${taskTitle}"\n\nSáº½ xoÃ¡ cáº£: sub-task, comment, file Ä‘Ã­nh kÃ¨m, checklist, lá»‹ch sá»­. KHÃ”NG thá»ƒ khÃ´i phá»¥c.`
     );
     if (!ok) return;
     const { error } = await deleteTaskCascade(taskId, userId);
-    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
-    toast('Đã xoá task', 'success');
+    if (error) { toast('Lá»—i: ' + error.message, 'error'); return; }
+    toast('ÄÃ£ xoÃ¡ task', 'success');
     onRefresh && onRefresh();
   }
 
@@ -45,8 +45,8 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     if (!canPinTasks) return;
     const newPinned = !currentPinned;
     const { error } = await supabase.from('tasks').update({ pinned: newPinned, updated_at: new Date().toISOString() }).eq('id', taskId);
-    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
-    toast(newPinned ? '📌 Đã ghim task' : 'Đã bỏ ghim', 'success');
+    if (error) { toast('Lá»—i: ' + error.message, 'error'); return; }
+    toast(newPinned ? 'ðŸ“Œ ÄÃ£ ghim task' : 'ÄÃ£ bá» ghim', 'success');
     onRefresh && onRefresh();
   }
 
@@ -56,24 +56,24 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     const canAssign = isAdmin || isDirector || task.created_by === userId;
-    if (!canAssign) { toast('Bạn không có quyền giao task này', 'error'); return; }
+    if (!canAssign) { toast('Báº¡n khÃ´ng cÃ³ quyá»n giao task nÃ y', 'error'); return; }
     // Kiem tra xem user da la assignee chua
     const existing = (task.assignees || []).some(a => a.user_id === userToAssignId);
-    if (existing) { toast(userName + ' đã là người nhận task này', 'error'); return; }
+    if (existing) { toast(userName + ' Ä‘Ã£ lÃ  ngÆ°á»i nháº­n task nÃ y', 'error'); return; }
     const { error } = await supabase.from('task_assignees').insert({ task_id: taskId, user_id: userToAssignId });
-    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    if (error) { toast('Lá»—i: ' + error.message, 'error'); return; }
     // Gui thong bao cho nguoi nhan task
     try {
       await supabase.from('notifications').insert({
         user_id: userToAssignId,
         type: 'task_assigned',
-        title: 'Bạn được giao task',
-        message: (currentUserName || 'Ai đó') + ' vừa giao bạn task "' + task.title + '"',
+        title: 'Báº¡n Ä‘Æ°á»£c giao task',
+        message: (currentUserName || 'Ai Ä‘Ã³') + ' vá»«a giao báº¡n task "' + task.title + '"',
         task_id: taskId,
       });
-      sendPush(userToAssignId, '📋 Bạn được giao task', (currentUserName || 'Ai đó') + ': "' + task.title + '"', { url: '/dashboard', tag: 'assigned-' + taskId });
+      sendPush(userToAssignId, 'ðŸ“‹ Báº¡n Ä‘Æ°á»£c giao task', (currentUserName || 'Ai Ä‘Ã³') + ': "' + task.title + '"', { url: '/dashboard', tag: 'assigned-' + taskId });
     } catch (e) { /* non-fatal */ }
-    toast('✅ Đã giao task cho ' + userName, 'success');
+    toast('âœ… ÄÃ£ giao task cho ' + userName, 'success');
     onRefresh && onRefresh();
   }
   const [expanded, setExpanded] = useState(null);
@@ -89,7 +89,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
 
   // Build the list of members the current user is allowed to @mention.
   // Rule: managers/staff only see people in their own department,
-  // EXCEPT Tổng Giám đốc và Kế toán — they see everyone.
+  // EXCEPT Tá»•ng GiÃ¡m Ä‘á»‘c vÃ  Káº¿ toÃ¡n â€” they see everyone.
   const isCEOorAcc = currentUserRole === 'director' || currentUserRole === 'accountant';
   const mentionables = (members || []).filter(m =>
     m.id !== userId && (isCEOorAcc || m.department === department || m.role === 'director' || m.role === 'accountant')
@@ -121,7 +121,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     setComments(p => ({ ...p, [tid]: data || [] }));
   }
 
-  // Feature 12: Toggle reaction (emoji) len 1 comment. Neu da co reaction cua minh voi emoji do → xoa; nguoc lai → them.
+  // Feature 12: Toggle reaction (emoji) len 1 comment. Neu da co reaction cua minh voi emoji do â†’ xoa; nguoc lai â†’ them.
   async function toggleReaction(commentId, emoji, taskId) {
     const commentList = comments[taskId] || [];
     const comment = commentList.find(c => c.id === commentId);
@@ -129,10 +129,10 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     const existing = (comment.reactions || []).find(r => r.user_id === userId && r.emoji === emoji);
     if (existing) {
       const { error } = await supabase.from('comment_reactions').delete().eq('id', existing.id);
-      if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+      if (error) { toast('Lá»—i: ' + error.message, 'error'); return; }
     } else {
       const { error } = await supabase.from('comment_reactions').insert({ comment_id: commentId, user_id: userId, emoji });
-      if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+      if (error) { toast('Lá»—i: ' + error.message, 'error'); return; }
     }
     loadComments(taskId);
   }
@@ -203,17 +203,17 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
       for (const mid of uniqueIds) {
         const m = members.find(x => x.id === mid);
         if (!m) continue;
-        // Verify @Name still appears in content — user may have deleted it
+        // Verify @Name still appears in content â€” user may have deleted it
         if (!contentText.includes('@' + m.name)) continue;
         if (mid === userId) continue;
         await supabase.from('notifications').insert({
           user_id: mid,
           type: 'mention',
-          title: 'Bạn được nhắc đến',
-          message: `${currentUserName || 'Ai đó'} đã nhắc bạn trong "${taskTitle}"`,
+          title: 'Báº¡n Ä‘Æ°á»£c nháº¯c Ä‘áº¿n',
+          message: `${currentUserName || 'Ai Ä‘Ã³'} Ä‘Ã£ nháº¯c báº¡n trong "${taskTitle}"`,
           task_id: tid,
         });
-        sendPush(mid, 'Bạn được nhắc đến', `${currentUserName || 'Ai đó'} nhắc bạn trong "${taskTitle}"`, { url: '/dashboard', tag: 'mention-' + tid });
+        sendPush(mid, 'Báº¡n Ä‘Æ°á»£c nháº¯c Ä‘áº¿n', `${currentUserName || 'Ai Ä‘Ã³'} nháº¯c báº¡n trong "${taskTitle}"`, { url: '/dashboard', tag: 'mention-' + tid });
       }
     } catch (e) { /* non-fatal */ }
 
@@ -229,7 +229,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
 
   async function updateStatus(tid, s) {
     const task = tasks.find(t => t.id === tid);
-    // Nếu task đang quá hạn và user định chuyển sang done/waiting → yêu cầu chọn lý do (nếu chưa có)
+    // Náº¿u task Ä‘ang quÃ¡ háº¡n vÃ  user Ä‘á»‹nh chuyá»ƒn sang done/waiting â†’ yÃªu cáº§u chá»n lÃ½ do (náº¿u chÆ°a cÃ³)
     const isOverdueNow = task && task.deadline && new Date(task.deadline) < new Date() && task.status !== 'done';
     const needsReason = isOverdueNow && (s === 'done' || s === 'waiting') && !task.overdue_reason;
     if (needsReason) {
@@ -247,7 +247,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     const task = tasks.find(t => t.id === tid);
     if (task && task.created_by !== userId) {
       const userName = members.find(m => m.id === userId)?.name || '';
-      sendPush(task.created_by, ST[s].l, userName + ' chuyển "' + task.title + '" → ' + ST[s].l, { url: '/dashboard', tag: 'status-' + tid });
+      sendPush(task.created_by, ST[s].l, userName + ' chuyá»ƒn "' + task.title + '" â†’ ' + ST[s].l, { url: '/dashboard', tag: 'status-' + tid });
     }
     const taskObj = tasks.find(t => t.id === tid);
     logActivity({ userId, userName: members.find(m => m.id === userId)?.name, action: ACTIONS.TASK_STATUS_CHANGED, targetType: 'task', targetId: tid, targetTitle: taskObj?.title, details: { old_status: taskObj?.status, new_status: s }, department: taskObj?.department });
@@ -255,7 +255,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
   }
 
   async function submitOverdueReason() {
-    if (!overdueReason) return toast('Vui lòng chọn lý do', 'error');
+    if (!overdueReason) return toast('Vui lÃ²ng chá»n lÃ½ do', 'error');
     const { taskId, status } = overdueModal;
     await applyStatusChange(taskId, status, {
       overdue_reason: overdueReason,
@@ -284,7 +284,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
   function removeSubFile(index) { setSubFiles(prev => prev.filter((_, i) => i !== index)); }
 
   async function createSubTask(parentId) {
-    if (!subTitle.trim()) return toast('Nhập tiêu đề nhiệm vụ con', 'error');
+    if (!subTitle.trim()) return toast('Nháº­p tiÃªu Ä‘á» nhiá»‡m vá»¥ con', 'error');
     setSubCreating(true);
     const parentTask = tasks.find(t => t.id === parentId);
     const { data: sub, error } = await supabase.from('tasks').insert({
@@ -292,7 +292,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
       deadline: subDeadline ? new Date(subDeadline).toISOString() : null,
       created_by: userId, status: 'todo', priority: 'medium', approval_status: 'none'
     }).select().single();
-    if (error) { toast('Lỗi: ' + error.message, 'error'); setSubCreating(false); return; }
+    if (error) { toast('Lá»—i: ' + error.message, 'error'); setSubCreating(false); return; }
     // Copy assignees from parent
     const parentAssignees = parentTask?.assignees || [];
     for (const a of parentAssignees) {
@@ -308,7 +308,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
         await supabase.from('task_files').insert({ task_id: sub.id, file_name: f.name, file_url: publicUrl, file_type: f.type, file_size: f.size, uploaded_by: userId });
       }
     }
-    toast('Đã tạo nhiệm vụ con!', 'success');
+    toast('ÄÃ£ táº¡o nhiá»‡m vá»¥ con!', 'success');
     setSubTitle(''); setSubDeadline(''); setSubFiles([]); setShowSubForm(null); setSubCreating(false);
     loadSubTasks(parentId);
   }
@@ -321,10 +321,10 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     if (!checklist[tid]) loadChecklist(tid);
   }
 
-  // Auto expand + scroll khi mở task từ notification.
+  // Auto expand + scroll khi má»Ÿ task tá»« notification.
   useEffect(() => {
     if (!focusTaskId) return;
-    // Kiểm tra task có trong list không (có thể bị filter theo dept/branch).
+    // Kiá»ƒm tra task cÃ³ trong list khÃ´ng (cÃ³ thá»ƒ bá»‹ filter theo dept/branch).
     const exists = tasks.some(t => t.id === focusTaskId || t.parent_id === focusTaskId);
     if (!exists) return;
     setExpanded(focusTaskId);
@@ -348,7 +348,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
   const ini = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
   const fmtDT = d => { if (!d) return ''; const dt = new Date(d); return dt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); };
   const fmtDate = d => d ? new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) : '';
-  const timeAgo = d => { const m = Math.floor((Date.now() - new Date(d)) / 60000); if (m < 1) return 'Vừa xong'; if (m < 60) return m + 'p'; const h = Math.floor(m / 60); if (h < 24) return h + 'h'; return Math.floor(h / 24) + 'd'; };
+  const timeAgo = d => { const m = Math.floor((Date.now() - new Date(d)) / 60000); if (m < 1) return 'Vá»«a xong'; if (m < 60) return m + 'p'; const h = Math.floor(m / 60); if (h < 24) return h + 'h'; return Math.floor(h / 24) + 'd'; };
   const isOverdue = (d, s) => s !== 'done' && d && new Date(d) < new Date();
 
   // Only show parent tasks (no parent_id). Feature 9: pinned tasks len dau.
@@ -357,20 +357,20 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     return 0; // giu nguyen thu tu cu (da sort theo created_at desc tu DB)
   });
 
-  // Overdue reason modal — rendered above all views
+  // Overdue reason modal â€” rendered above all views
   const overdueModalEl = overdueModal && (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setOverdueModal(null)}>
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-bold text-red-700 mb-1">⚠ Task này đã trễ hạn</h3>
-        <p className="text-xs text-gray-500 mb-3">Vui lòng chọn lý do trễ trước khi đổi trạng thái. Dữ liệu này phục vụ báo cáo cuối tháng.</p>
+        <h3 className="text-base font-bold text-red-700 mb-1">âš  Task nÃ y Ä‘Ã£ trá»… háº¡n</h3>
+        <p className="text-xs text-gray-500 mb-3">Vui lÃ²ng chá»n lÃ½ do trá»… trÆ°á»›c khi Ä‘á»•i tráº¡ng thÃ¡i. Dá»¯ liá»‡u nÃ y phá»¥c vá»¥ bÃ¡o cÃ¡o cuá»‘i thÃ¡ng.</p>
         <div className="space-y-1.5 mb-3">
           {[
-            'Không đủ thời gian',
-            'Thiếu nguồn lực / công cụ',
-            'Chờ phản hồi từ người khác',
-            'Ưu tiên việc khẩn cấp khác',
-            'Quên / sót việc',
-            'Khác (ghi chú thêm bên dưới)',
+            'KhÃ´ng Ä‘á»§ thá»i gian',
+            'Thiáº¿u nguá»“n lá»±c / cÃ´ng cá»¥',
+            'Chá» pháº£n há»“i tá»« ngÆ°á»i khÃ¡c',
+            'Æ¯u tiÃªn viá»‡c kháº©n cáº¥p khÃ¡c',
+            'QuÃªn / sÃ³t viá»‡c',
+            'KhÃ¡c (ghi chÃº thÃªm bÃªn dÆ°á»›i)',
           ].map(r => (
             <label key={r} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs ${overdueReason === r ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:bg-gray-50'}`}>
               <input type="radio" name="overdue-reason" checked={overdueReason === r} onChange={() => setOverdueReason(r)} className="accent-emerald-600" />
@@ -381,13 +381,13 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
         <textarea
           className="input-field !text-xs w-full mb-3"
           rows={2}
-          placeholder="Ghi chú thêm (tùy chọn)..."
+          placeholder="Ghi chÃº thÃªm (tÃ¹y chá»n)..."
           value={overdueNote}
           onChange={e => setOverdueNote(e.target.value)}
         />
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setOverdueModal(null)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">Hủy</button>
-          <button onClick={submitOverdueReason} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#2D5A3D' }}>Xác nhận & cập nhật</button>
+          <button onClick={() => setOverdueModal(null)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">Há»§y</button>
+          <button onClick={submitOverdueReason} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#123524' }}>XÃ¡c nháº­n & cáº­p nháº­t</button>
         </div>
       </div>
     </div>
@@ -398,7 +398,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     parentTasks.forEach(t => {
       const assignees = t.assignees || [];
       if (assignees.length === 0) {
-        if (!grouped['none']) grouped['none'] = { name: 'Chưa giao', tasks: [] };
+        if (!grouped['none']) grouped['none'] = { name: 'ChÆ°a giao', tasks: [] };
         grouped['none'].tasks.push(t);
       } else {
         assignees.forEach(a => {
@@ -418,7 +418,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
             <div key={key} className="card p-4">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ background: g.avatar_color || '#f3f4f6', color: '#333' }}>{ini(g.name)}</div>
-                <div className="flex-1"><p className="text-sm font-semibold">{g.name}</p><p className="text-[10px] text-gray-400">{g.position} · {done}/{g.tasks.length} xong</p></div>
+                <div className="flex-1"><p className="text-sm font-semibold">{g.name}</p><p className="text-[10px] text-gray-400">{g.position} Â· {done}/{g.tasks.length} xong</p></div>
                 <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: pct + '%', background: pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626' }} /></div>
                 <span className="text-[10px] font-bold text-gray-400 w-8 text-right">{pct}%</span>
               </div>
@@ -426,7 +426,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
             </div>
           );
         })}
-        {parentTasks.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">Chưa có task</div>}
+        {parentTasks.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">ChÆ°a cÃ³ task</div>}
       </div>
     );
   }
@@ -436,9 +436,9 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
   return (
     <div className="space-y-4">
       {overdueModalEl}
-      {todo.length > 0 &&<div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Cần làm ({todo.length})</p><div className="space-y-1.5">{todo.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
-      {done.length > 0 && <div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Đã xong ({done.length})</p><div className="space-y-1.5 opacity-50">{done.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
-      {parentTasks.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">Chưa có task</div>}
+      {todo.length > 0 &&<div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Cáº§n lÃ m ({todo.length})</p><div className="space-y-1.5">{todo.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
+      {done.length > 0 && <div><p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">ÄÃ£ xong ({done.length})</p><div className="space-y-1.5 opacity-50">{done.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
+      {parentTasks.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">ChÆ°a cÃ³ task</div>}
     </div>
   );
 }
@@ -476,7 +476,7 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
     <div id={'task-row-' + t.id} className={`border rounded-xl transition-all ${t.pinned ? 'border-l-[3px] border-l-amber-500 bg-amber-50/20' : od ? 'border-l-[3px] border-l-red-500 border-red-200' : 'border-gray-100'} ${exp ? 'bg-gray-50/50' : 'bg-white hover:bg-gray-50/30'}`}>
       <div className="flex items-center gap-2 p-3 cursor-pointer" onClick={toggle}>
         <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: st.c }} />
-        {t.pinned && <span className="text-xs flex-shrink-0" title="Đã ghim">📌</span>}
+        {t.pinned && <span className="text-xs flex-shrink-0" title="ÄÃ£ ghim">ðŸ“Œ</span>}
         <p className={`text-sm font-medium flex-1 truncate ${t.status === 'done' ? 'line-through text-gray-400' : ''}`}>{t.title}</p>
         {hasSubs && <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 font-semibold flex-shrink-0">{subDone}/{subs.length} con</span>}
         {assigneeNames && <span className="text-[10px] text-gray-400 truncate max-w-[120px]">{assigneeNames}</span>}
@@ -489,47 +489,47 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
         <div className="px-3 pb-3 border-t border-gray-100 pt-2.5 animate-fade-in">
           {t.description && <p className="text-xs text-gray-500 mb-2">{t.description}</p>}
           <div className="flex flex-wrap gap-2 text-[10px] text-gray-400 mb-2 items-center">
-            <span>Tạo: {fmtDT(t.created_at)}</span>
-            {t.deadline && <span>Hạn: {fmtDT(t.deadline)}</span>}
+            <span>Táº¡o: {fmtDT(t.created_at)}</span>
+            {t.deadline && <span>Háº¡n: {fmtDT(t.deadline)}</span>}
             {t.completed_at && <span>Xong: {fmtDT(t.completed_at)}</span>}
-            <span>Giao bởi: {t.creator?.name}</span>
+            <span>Giao bá»Ÿi: {t.creator?.name}</span>
             <div className="ml-auto flex items-center gap-1">
               {canPinTasks && togglePin && (
                 <button
                   onClick={(e) => { e.stopPropagation(); togglePin(t.id, t.pinned, t.title); }}
                   className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${t.pinned ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-gray-500 hover:bg-gray-100'}`}
-                  title={t.pinned ? 'Bỏ ghim' : 'Ghim task lên đầu'}>
-                  <span className="text-[11px]">📌</span>
-                  {t.pinned ? 'Bỏ ghim' : 'Ghim'}
+                  title={t.pinned ? 'Bá» ghim' : 'Ghim task lÃªn Ä‘áº§u'}>
+                  <span className="text-[11px]">ðŸ“Œ</span>
+                  {t.pinned ? 'Bá» ghim' : 'Ghim'}
                 </button>
               )}
               {(isDirector || canDeleteTask) && delTask && (
                 <button
                   onClick={(e) => { e.stopPropagation(); delTask(t.id, t.title); }}
                   className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-red-600 hover:bg-red-50 transition-colors"
-                  title="Xoá vĩnh viễn">
+                  title="XoÃ¡ vÄ©nh viá»…n">
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
-                  Xoá
+                  XoÃ¡
                 </button>
               )}
             </div>
           </div>
           {t.overdue_reason && (
             <div className="mb-2 px-2 py-1.5 rounded-lg bg-red-50 border border-red-100 text-[10px]">
-              <span className="font-semibold text-red-700">⚠ Lý do trễ hạn:</span> <span className="text-red-700">{t.overdue_reason}</span>
+              <span className="font-semibold text-red-700">âš  LÃ½ do trá»… háº¡n:</span> <span className="text-red-700">{t.overdue_reason}</span>
               {t.overdue_reason_note && <p className="text-red-600 mt-0.5 italic">"{t.overdue_reason_note}"</p>}
             </div>
           )}
           {t.files?.length > 0 && (
             <div className="mb-2">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Đính kèm ({t.files.length})</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">ÄÃ­nh kÃ¨m ({t.files.length})</p>
               <FileList files={t.files} />
             </div>
           )}
           {t.status !== 'done' && (
             <div className="flex gap-1 mb-3 flex-wrap">
               {['todo', 'doing', 'waiting', 'done'].filter(s => s !== t.status).map(s => (
-                <button key={s} onClick={() => upd(t.id, s)} className="px-2 py-1 rounded text-[10px] font-semibold cursor-pointer hover:opacity-80" style={{ background: ST[s].c + '15', color: ST[s].c }}>→ {ST[s].l}</button>
+                <button key={s} onClick={() => upd(t.id, s)} className="px-2 py-1 rounded text-[10px] font-semibold cursor-pointer hover:opacity-80" style={{ background: ST[s].c + '15', color: ST[s].c }}>â†’ {ST[s].l}</button>
               ))}
             </div>
           )}
@@ -544,12 +544,12 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                 <>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-[10px] font-semibold text-gray-400 uppercase">
-                      Checklist {items.length > 0 && <span className="text-emerald-600">({doneCount}/{items.length} · {pct}%)</span>}
+                      Checklist {items.length > 0 && <span className="text-emerald-600">({doneCount}/{items.length} Â· {pct}%)</span>}
                     </p>
                   </div>
                   {items.length > 0 && (
                     <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mb-2">
-                      <div className="h-full transition-all" style={{ width: pct + '%', background: pct === 100 ? '#16a34a' : '#2D5A3D' }} />
+                      <div className="h-full transition-all" style={{ width: pct + '%', background: pct === 100 ? '#16a34a' : '#123524' }} />
                     </div>
                   )}
                   <div className="space-y-1 mb-2">
@@ -558,7 +558,7 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                         <input type="checkbox" checked={item.done} onChange={() => toggleChecklistItem(item)}
                           className="w-3.5 h-3.5 rounded cursor-pointer accent-emerald-600 flex-shrink-0" />
                         <span className={`text-xs flex-1 ${item.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{item.text}</span>
-                        <button onClick={() => removeChecklistItem(item)} className="text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Xóa">
+                        <button onClick={() => removeChecklistItem(item)} className="text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="XÃ³a">
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                       </div>
@@ -567,12 +567,12 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                   <div className="flex gap-1.5">
                     <input
                       className="input-field !py-1 !text-xs flex-1"
-                      placeholder="+ Thêm bước checklist..."
+                      placeholder="+ ThÃªm bÆ°á»›c checklist..."
                       value={newChkText}
                       onChange={e => setNewChkText(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addChecklistItem(t.id); } }}
                     />
-                    <button onClick={() => addChecklistItem(t.id)} className="px-2 py-1 rounded-lg text-[10px] font-semibold text-white" style={{ background: '#2D5A3D' }}>+</button>
+                    <button onClick={() => addChecklistItem(t.id)} className="px-2 py-1 rounded-lg text-[10px] font-semibold text-white" style={{ background: '#123524' }}>+</button>
                   </div>
                 </>
               );
@@ -582,11 +582,11 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
           {/* ============ SUB-TASKS SECTION ============ */}
           <div className="mt-3 pt-3 border-t border-gray-100">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase">Nhiệm vụ con {hasSubs && `(${subDone}/${subs.length} xong)`}</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase">Nhiá»‡m vá»¥ con {hasSubs && `(${subDone}/${subs.length} xong)`}</p>
               {isAdmin && (
                 <button onClick={(e) => { e.stopPropagation(); setShowSubForm(showSubForm === t.id ? null : t.id); setSubTitle(''); setSubDeadline(''); setSubFiles([]); }}
-                  className="text-[10px] font-semibold px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors" style={{ color: '#2D5A3D' }}>
-                  + Tạo nhiệm vụ con
+                  className="text-[10px] font-semibold px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors" style={{ color: '#123524' }}>
+                  + Táº¡o nhiá»‡m vá»¥ con
                 </button>
               )}
             </div>
@@ -595,7 +595,7 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
             {showSubForm === t.id && (
               <div className="p-3 mb-3 rounded-xl border border-emerald-200 bg-emerald-50/50 animate-fade-in">
                 <div className="space-y-2">
-                  <input className="input-field !text-xs !py-1.5" placeholder="Tiêu đề nhiệm vụ con *" value={subTitle} onChange={e => setSubTitle(e.target.value)} />
+                  <input className="input-field !text-xs !py-1.5" placeholder="TiÃªu Ä‘á» nhiá»‡m vá»¥ con *" value={subTitle} onChange={e => setSubTitle(e.target.value)} />
                   <div className="flex gap-2 items-end">
                     <div className="flex-1">
                       <label className="block text-[10px] text-gray-500 mb-0.5">Deadline</label>
@@ -604,7 +604,7 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                   </div>
                   {/* Sub-task file attachments */}
                   <div>
-                    <label className="block text-[10px] text-gray-500 mb-0.5">Đính kèm</label>
+                    <label className="block text-[10px] text-gray-500 mb-0.5">ÄÃ­nh kÃ¨m</label>
                     <div className="space-y-1">
                       {subFiles.map((f, i) => (
                         <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg border border-gray-200 bg-white text-xs">
@@ -618,14 +618,14 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                       ))}
                       <label className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer text-xs text-gray-500">
                         <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                        Chọn file
+                        Chá»n file
                         <input type="file" multiple className="hidden" onChange={handleAddSubFile} />
                       </label>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => createSubTask(t.id)} disabled={subCreating} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>{subCreating ? '...' : 'Tạo'}</button>
-                    <button onClick={() => setShowSubForm(null)} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200">Hủy</button>
+                    <button onClick={() => createSubTask(t.id)} disabled={subCreating} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-white disabled:opacity-50" style={{ background: '#123524' }}>{subCreating ? '...' : 'Táº¡o'}</button>
+                    <button onClick={() => setShowSubForm(null)} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200">Há»§y</button>
                   </div>
                 </div>
               </div>
@@ -645,12 +645,12 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                         <p className={`text-xs font-medium flex-1 truncate ${sub.status === 'done' ? 'line-through text-gray-400' : ''}`}>{sub.title}</p>
                         <span className="px-1 py-0.5 rounded text-[8px] font-semibold" style={{ background: subSt.c + '15', color: subSt.c }}>{subSt.l}</span>
                         {sub.deadline && <span className={`text-[9px] flex-shrink-0 ${subOd ? 'text-red-600 font-bold' : 'text-gray-400'}`}>{fmtDate(sub.deadline)}{subOd && ' !'}</span>}
-                        {sub.files?.length > 0 && <span className="text-[9px] text-gray-400">📎{sub.files.length}</span>}
+                        {sub.files?.length > 0 && <span className="text-[9px] text-gray-400">ðŸ“Ž{sub.files.length}</span>}
                         <svg className={`w-2.5 h-2.5 text-gray-300 transition-transform ${isSubExp ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                       </div>
                       {isSubExp && (
                         <div className="px-2.5 pb-2 border-t border-gray-50 pt-2 animate-fade-in">
-                          {sub.deadline && <p className="text-[10px] text-gray-400 mb-1">Hạn: {fmtDT(sub.deadline)}</p>}
+                          {sub.deadline && <p className="text-[10px] text-gray-400 mb-1">Háº¡n: {fmtDT(sub.deadline)}</p>}
                           {sub.files?.length > 0 && (
                             <div className="mb-2">
                               <p className="text-[9px] font-semibold text-gray-400 uppercase mb-0.5">File ({sub.files.length})</p>
@@ -660,7 +660,7 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                           {sub.status !== 'done' && (
                             <div className="flex gap-1 flex-wrap">
                               {['todo', 'doing', 'waiting', 'done'].filter(s => s !== sub.status).map(s => (
-                                <button key={s} onClick={() => updateSubStatus(sub.id, s, t.id)} className="px-1.5 py-0.5 rounded text-[9px] font-semibold cursor-pointer hover:opacity-80" style={{ background: ST[s].c + '15', color: ST[s].c }}>→ {ST[s].l}</button>
+                                <button key={s} onClick={() => updateSubStatus(sub.id, s, t.id)} className="px-1.5 py-0.5 rounded text-[9px] font-semibold cursor-pointer hover:opacity-80" style={{ background: ST[s].c + '15', color: ST[s].c }}>â†’ {ST[s].l}</button>
                               ))}
                             </div>
                           )}
@@ -671,12 +671,12 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                 })}
               </div>
             )}
-            {subs.length === 0 && !showSubForm && <p className="text-[10px] text-gray-300 italic">Chưa có nhiệm vụ con</p>}
+            {subs.length === 0 && !showSubForm && <p className="text-[10px] text-gray-300 italic">ChÆ°a cÃ³ nhiá»‡m vá»¥ con</p>}
           </div>
 
           {/* Comments */}
           <div className="mt-3 pt-2 border-t border-gray-100">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1.5">Bình luận {comments?.length > 0 && `(${comments.length})`}</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1.5">BÃ¬nh luáº­n {comments?.length > 0 && `(${comments.length})`}</p>
             {comments?.map(c => (
               <CommentRow key={c.id} c={c} ini={ini} timeAgo={timeAgo} mentionables={mentionables} uid={uid} toggleReaction={toggleReaction} taskId={t.id} />
             ))}
@@ -691,12 +691,12 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                   onMention={(mId) => setDraftField(t.id, 'mentionedIds', draft.mentionedIds.includes(mId) ? draft.mentionedIds : [...draft.mentionedIds, mId])}
                   ini={ini}
                 />
-                <label className="flex items-center px-2 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer text-gray-500" title="Đính kèm file">
+                <label className="flex items-center px-2 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer text-gray-500" title="ÄÃ­nh kÃ¨m file">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   <input type="file" multiple className="hidden" onChange={(e) => handleAddCommentFile(t.id, e)} />
                 </label>
-                <button onClick={() => addC(t.id)} disabled={uploading} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>
-                  {uploading ? '...' : 'Gửi'}
+                <button onClick={() => addC(t.id)} disabled={uploading} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#123524' }}>
+                  {uploading ? '...' : 'Gá»­i'}
                 </button>
               </div>
               {draft.files.length > 0 && (
@@ -731,7 +731,7 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                         </svg>
-                        <span>Giao task này cho <strong>@{m.name}</strong>?</span>
+                        <span>Giao task nÃ y cho <strong>@{m.name}</strong>?</span>
                       </button>
                     ))}
                   </div>
@@ -747,7 +747,7 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
 }
 
 // Feature 12: Bo emoji reactions cho phep user like/emoji nhanh comment
-const REACTION_EMOJIS = ['👍', '✅', '❤️', '🎉', '🙏', '😂'];
+const REACTION_EMOJIS = ['ðŸ‘', 'âœ…', 'â¤ï¸', 'ðŸŽ‰', 'ðŸ™', 'ðŸ˜‚'];
 
 function CommentRow({ c, ini, timeAgo, mentionables, uid, toggleReaction, taskId }) {
   const [showPicker, setShowPicker] = useState(false);
@@ -764,7 +764,7 @@ function CommentRow({ c, ini, timeAgo, mentionables, uid, toggleReaction, taskId
     <div className="flex gap-2 mb-2 group relative">
       <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0 mt-0.5" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>
+        <p className="text-[10px]"><strong>{c.user?.name}</strong> Â· {timeAgo(c.created_at)}</p>
         {c.content && <p className="text-xs text-gray-600 whitespace-pre-wrap">{renderMentions(c.content, mentionables)}</p>}
         {c.files && c.files.length > 0 && <FileList files={c.files} />}
         {/* Reactions display + picker */}
@@ -780,8 +780,8 @@ function CommentRow({ c, ini, timeAgo, mentionables, uid, toggleReaction, taskId
           <div className="relative">
             <button onClick={() => setShowPicker(v => !v)}
               className={`px-1.5 py-0.5 rounded-full text-[10px] text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all ${reactionEntries.length === 0 ? 'opacity-0 group-hover:opacity-100' : ''}`}
-              title="Thêm reaction">
-              😊+
+              title="ThÃªm reaction">
+              ðŸ˜Š+
             </button>
             {showPicker && (
               <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1 flex gap-0.5 z-10 animate-fade-in">
@@ -790,7 +790,7 @@ function CommentRow({ c, ini, timeAgo, mentionables, uid, toggleReaction, taskId
                   return (
                     <button key={emoji} onClick={() => { toggleReaction(c.id, emoji, taskId); setShowPicker(false); }}
                       className={`w-7 h-7 rounded flex items-center justify-center text-base hover:bg-gray-100 transition-all ${mine ? 'bg-blue-50' : ''}`}
-                      title={mine ? 'Bỏ ' + emoji : 'Thêm ' + emoji}>
+                      title={mine ? 'Bá» ' + emoji : 'ThÃªm ' + emoji}>
                       {emoji}
                     </button>
                   );
@@ -855,7 +855,7 @@ function CommentInput({ value, setValue, onSend, mentionables, onMention, ini })
       const before = atIdx === 0 ? ' ' : upto[atIdx - 1];
       const isBoundary = /\s/.test(before) || atIdx === 0;
       const q = upto.slice(atIdx + 1);
-      // Cancel if user typed a space — mention tokens cannot contain whitespace-only separators
+      // Cancel if user typed a space â€” mention tokens cannot contain whitespace-only separators
       if (isBoundary && !/\s$/.test(q)) {
         setOpen(true); setQuery(q); setAnchor(atIdx);
         return;
@@ -900,7 +900,7 @@ function CommentInput({ value, setValue, onSend, mentionables, onMention, ini })
       <input
         ref={inputRef}
         className="input-field !py-1.5 !text-xs w-full"
-        placeholder="Bình luận... (gõ @ để nhắc tên)"
+        placeholder="BÃ¬nh luáº­n... (gÃµ @ Ä‘á»ƒ nháº¯c tÃªn)"
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
@@ -918,8 +918,8 @@ function CommentInput({ value, setValue, onSend, mentionables, onMention, ini })
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{m.name}</p>
                 <p className="text-[9px] text-gray-400 truncate">
-                  {m.role === 'director' ? 'Tổng Giám đốc' : m.role === 'accountant' ? 'Kế toán' : (m.position || '')}
-                  {m.department ? ` · ${m.department === 'hotel' ? 'Hotel' : 'Nail'}` : ''}
+                  {m.role === 'director' ? 'Tá»•ng GiÃ¡m Ä‘á»‘c' : m.role === 'accountant' ? 'Káº¿ toÃ¡n' : (m.position || '')}
+                  {m.department ? ` Â· ${m.department === 'hotel' ? 'Hotel' : 'Nail'}` : ''}
                 </p>
               </div>
             </div>

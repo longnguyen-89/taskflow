@@ -3,28 +3,28 @@ import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 
 const FREQ = {
-  daily: 'Hằng ngày',
-  weekly: 'Hằng tuần',
-  monthly: 'Hằng tháng',
-  quarterly: 'Mỗi 3 tháng (định kỳ quý)',
-  semiannual: 'Mỗi 6 tháng (nửa năm)',
-  yearly: 'Hằng năm (1 năm 1 lần)',
+  daily: 'Háº±ng ngÃ y',
+  weekly: 'Háº±ng tuáº§n',
+  monthly: 'Háº±ng thÃ¡ng',
+  quarterly: 'Má»—i 3 thÃ¡ng (Ä‘á»‹nh ká»³ quÃ½)',
+  semiannual: 'Má»—i 6 thÃ¡ng (ná»­a nÄƒm)',
+  yearly: 'Háº±ng nÄƒm (1 nÄƒm 1 láº§n)',
 };
 const WEEKDAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-const MONTHS = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
-const PR = { high: 'Cao', medium: 'TB', low: 'Thấp' };
-// Các tần suất cần ngày trong tháng + tháng tham chiếu
+const MONTHS = ['ThÃ¡ng 1', 'ThÃ¡ng 2', 'ThÃ¡ng 3', 'ThÃ¡ng 4', 'ThÃ¡ng 5', 'ThÃ¡ng 6', 'ThÃ¡ng 7', 'ThÃ¡ng 8', 'ThÃ¡ng 9', 'ThÃ¡ng 10', 'ThÃ¡ng 11', 'ThÃ¡ng 12'];
+const PR = { high: 'Cao', medium: 'TB', low: 'Tháº¥p' };
+// CÃ¡c táº§n suáº¥t cáº§n ngÃ y trong thÃ¡ng + thÃ¡ng tham chiáº¿u
 const NEEDS_MONTHDAY = new Set(['monthly', 'quarterly', 'semiannual', 'yearly']);
 const NEEDS_MONTH_OF_YEAR = new Set(['quarterly', 'semiannual', 'yearly']);
 
 function getFileIcon(name) {
   const ext = (name || '').toLowerCase();
-  if (ext.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/)) return '🖼';
-  if (ext.match(/\.pdf$/)) return '📄';
-  if (ext.match(/\.(doc|docx)$/)) return '📝';
-  if (ext.match(/\.(xls|xlsx|csv)$/)) return '📊';
-  if (ext.match(/\.(ppt|pptx)$/)) return '📽';
-  return '📎';
+  if (ext.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/)) return 'ðŸ–¼';
+  if (ext.match(/\.pdf$/)) return 'ðŸ“„';
+  if (ext.match(/\.(doc|docx)$/)) return 'ðŸ“';
+  if (ext.match(/\.(xls|xlsx|csv)$/)) return 'ðŸ“Š';
+  if (ext.match(/\.(ppt|pptx)$/)) return 'ðŸ“½';
+  return 'ðŸ“Ž';
 }
 function formatFileSize(bytes) {
   if (!bytes) return '';
@@ -54,7 +54,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   const [assignees, setAssignees] = useState([]);
   const [watchers, setWatchers] = useState([]);
   const [chkLines, setChkLines] = useState('');
-  // File mới chọn (chưa upload) + file đã có sẵn của template
+  // File má»›i chá»n (chÆ°a upload) + file Ä‘Ã£ cÃ³ sáºµn cá»§a template
   const [newFiles, setNewFiles] = useState([]);
   const [existingFiles, setExistingFiles] = useState([]); // [{file_name, file_url, file_type, file_size}]
   const [uploading, setUploading] = useState(false);
@@ -101,18 +101,18 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   }
 
   async function save() {
-    if (!title.trim()) return toast('Nhập tiêu đề', 'error');
-    if (assignees.length === 0) return toast('Chọn ít nhất 1 người', 'error');
+    if (!title.trim()) return toast('Nháº­p tiÃªu Ä‘á»', 'error');
+    if (assignees.length === 0) return toast('Chá»n Ã­t nháº¥t 1 ngÆ°á»i', 'error');
     const checklist = chkLines.split('\n').map(s => s.trim()).filter(Boolean);
 
-    // Upload các file mới chọn lên storage, gộp với file đã có
+    // Upload cÃ¡c file má»›i chá»n lÃªn storage, gá»™p vá»›i file Ä‘Ã£ cÃ³
     setUploading(true);
     const uploaded = [];
     for (const f of newFiles) {
       const safeName = f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
       const path = `recurring/${userId}/${Date.now()}_${safeName}`;
       const { error: ue } = await supabase.storage.from('attachments').upload(path, f);
-      if (ue) { setUploading(false); return toast('Lỗi upload file: ' + ue.message, 'error'); }
+      if (ue) { setUploading(false); return toast('Lá»—i upload file: ' + ue.message, 'error'); }
       const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(path);
       uploaded.push({ file_name: f.name, file_url: publicUrl, file_type: f.type, file_size: f.size });
     }
@@ -136,13 +136,13 @@ export default function RecurringTasks({ members, department, userId, taskGroups
     };
     if (editing) {
       const { error } = await supabase.from('recurring_tasks').update(payload).eq('id', editing.id);
-      if (error) return toast('Lỗi: ' + error.message, 'error');
-      toast('Đã cập nhật', 'success');
+      if (error) return toast('Lá»—i: ' + error.message, 'error');
+      toast('ÄÃ£ cáº­p nháº­t', 'success');
     } else {
       payload.created_by = userId;
       const { error } = await supabase.from('recurring_tasks').insert(payload);
-      if (error) return toast('Lỗi: ' + error.message, 'error');
-      toast('Đã tạo task lặp lại', 'success');
+      if (error) return toast('Lá»—i: ' + error.message, 'error');
+      toast('ÄÃ£ táº¡o task láº·p láº¡i', 'success');
     }
     setShowForm(false); resetForm(); fetchList();
   }
@@ -153,31 +153,31 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   }
 
   async function remove(r) {
-    if (!confirm(`Xóa template "${r.title}"? Các task đã sinh trước đó vẫn giữ nguyên.`)) return;
+    if (!confirm(`XÃ³a template "${r.title}"? CÃ¡c task Ä‘Ã£ sinh trÆ°á»›c Ä‘Ã³ váº«n giá»¯ nguyÃªn.`)) return;
     await supabase.from('recurring_tasks').delete().eq('id', r.id);
-    toast('Đã xóa template', 'success');
+    toast('ÄÃ£ xÃ³a template', 'success');
     fetchList();
   }
 
   function describeSchedule(r) {
     const t = `${String(r.deadline_hour).padStart(2, '0')}:${String(r.deadline_minute).padStart(2, '0')}`;
     const off = r.deadline_days_offset || 0;
-    const dtText = off === 0 ? `deadline ${t} cùng ngày` : `deadline ${t} sau ${off} ngày`;
-    if (r.frequency === 'daily') return `Mỗi ngày, ${dtText}`;
-    if (r.frequency === 'weekly') return `Mỗi ${WEEKDAYS[r.weekday]} hàng tuần, ${dtText}`;
-    if (r.frequency === 'monthly') return `Ngày ${r.monthday} hàng tháng, ${dtText}`;
+    const dtText = off === 0 ? `deadline ${t} cÃ¹ng ngÃ y` : `deadline ${t} sau ${off} ngÃ y`;
+    if (r.frequency === 'daily') return `Má»—i ngÃ y, ${dtText}`;
+    if (r.frequency === 'weekly') return `Má»—i ${WEEKDAYS[r.weekday]} hÃ ng tuáº§n, ${dtText}`;
+    if (r.frequency === 'monthly') return `NgÃ y ${r.monthday} hÃ ng thÃ¡ng, ${dtText}`;
     if (r.frequency === 'quarterly') {
       const m = r.month_of_year || 1;
       const months = [m, ((m - 1 + 3) % 12) + 1, ((m - 1 + 6) % 12) + 1, ((m - 1 + 9) % 12) + 1].sort((a, b) => a - b);
-      return `Ngày ${r.monthday}, mỗi 3 tháng (T${months.join(', T')}), ${dtText}`;
+      return `NgÃ y ${r.monthday}, má»—i 3 thÃ¡ng (T${months.join(', T')}), ${dtText}`;
     }
     if (r.frequency === 'semiannual') {
       const m = r.month_of_year || 1;
       const m2 = ((m - 1 + 6) % 12) + 1;
       const months = [m, m2].sort((a, b) => a - b);
-      return `Ngày ${r.monthday}, mỗi 6 tháng (T${months.join(' & T')}), ${dtText}`;
+      return `NgÃ y ${r.monthday}, má»—i 6 thÃ¡ng (T${months.join(' & T')}), ${dtText}`;
     }
-    if (r.frequency === 'yearly') return `Ngày ${r.monthday} ${MONTHS[(r.month_of_year || 1) - 1]} hằng năm, ${dtText}`;
+    if (r.frequency === 'yearly') return `NgÃ y ${r.monthday} ${MONTHS[(r.month_of_year || 1) - 1]} háº±ng nÄƒm, ${dtText}`;
     return '';
   }
 
@@ -187,27 +187,27 @@ export default function RecurringTasks({ members, department, userId, taskGroups
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold">Task lặp lại định kỳ</h2>
-          <p className="text-[11px] text-gray-500">Hệ thống sẽ tự sinh task vào sáng theo lịch — nhân viên không cần đợi anh giao thủ công.</p>
+          <h2 className="text-base font-bold">Task láº·p láº¡i Ä‘á»‹nh ká»³</h2>
+          <p className="text-[11px] text-gray-500">Há»‡ thá»‘ng sáº½ tá»± sinh task vÃ o sÃ¡ng theo lá»‹ch â€” nhÃ¢n viÃªn khÃ´ng cáº§n Ä‘á»£i anh giao thá»§ cÃ´ng.</p>
         </div>
-        <button onClick={() => { resetForm(); setShowForm(true); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#2D5A3D' }}>+ Tạo template</button>
+        <button onClick={() => { resetForm(); setShowForm(true); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: '#123524' }}>+ Táº¡o template</button>
       </div>
 
       {showForm && (
         <div className="card p-4 space-y-3">
-          <h3 className="text-sm font-bold">{editing ? 'Sửa template' : 'Template mới'}</h3>
-          <input className="input-field !text-xs" placeholder="Tiêu đề task * (vd: Mở cửa chi nhánh Bến Cát)" value={title} onChange={e => setTitle(e.target.value)} />
-          <textarea className="input-field !text-xs" rows={2} placeholder="Mô tả (tùy chọn)" value={desc} onChange={e => setDesc(e.target.value)} />
+          <h3 className="text-sm font-bold">{editing ? 'Sá»­a template' : 'Template má»›i'}</h3>
+          <input className="input-field !text-xs" placeholder="TiÃªu Ä‘á» task * (vd: Má»Ÿ cá»­a chi nhÃ¡nh Báº¿n CÃ¡t)" value={title} onChange={e => setTitle(e.target.value)} />
+          <textarea className="input-field !text-xs" rows={2} placeholder="MÃ´ táº£ (tÃ¹y chá»n)" value={desc} onChange={e => setDesc(e.target.value)} />
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-[10px] text-gray-500 mb-0.5">Tần suất</label>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Táº§n suáº¥t</label>
               <select className="input-field !text-xs" value={frequency} onChange={e => setFrequency(e.target.value)}>
                 {Object.entries(FREQ).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-[10px] text-gray-500 mb-0.5">Độ ưu tiên</label>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Äá»™ Æ°u tiÃªn</label>
               <select className="input-field !text-xs" value={priority} onChange={e => setPriority(e.target.value)}>
                 {Object.entries(PR).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
@@ -216,10 +216,10 @@ export default function RecurringTasks({ members, department, userId, taskGroups
 
           {frequency === 'weekly' && (
             <div>
-              <label className="block text-[10px] text-gray-500 mb-1">Vào thứ</label>
+              <label className="block text-[10px] text-gray-500 mb-1">VÃ o thá»©</label>
               <div className="flex gap-1 flex-wrap">
                 {WEEKDAYS.map((d, i) => (
-                  <button key={i} onClick={() => setWeekday(i)} className={`px-2.5 py-1 rounded text-[11px] font-semibold ${weekday === i ? 'text-white' : 'text-gray-600 bg-gray-100'}`} style={weekday === i ? { background: '#2D5A3D' } : {}}>{d}</button>
+                  <button key={i} onClick={() => setWeekday(i)} className={`px-2.5 py-1 rounded text-[11px] font-semibold ${weekday === i ? 'text-white' : 'text-gray-600 bg-gray-100'}`} style={weekday === i ? { background: '#123524' } : {}}>{d}</button>
                 ))}
               </div>
             </div>
@@ -228,13 +228,13 @@ export default function RecurringTasks({ members, department, userId, taskGroups
           {NEEDS_MONTHDAY.has(frequency) && (
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] text-gray-500 mb-0.5">Ngày trong tháng (1-31)</label>
+                <label className="block text-[10px] text-gray-500 mb-0.5">NgÃ y trong thÃ¡ng (1-31)</label>
                 <input type="number" min={1} max={31} className="input-field !text-xs" value={monthday} onChange={e => setMonthday(parseInt(e.target.value) || 1)} />
               </div>
               {NEEDS_MONTH_OF_YEAR.has(frequency) && (
                 <div>
                   <label className="block text-[10px] text-gray-500 mb-0.5">
-                    {frequency === 'yearly' ? 'Tháng trong năm' : 'Tháng tham chiếu (mốc bắt đầu)'}
+                    {frequency === 'yearly' ? 'ThÃ¡ng trong nÄƒm' : 'ThÃ¡ng tham chiáº¿u (má»‘c báº¯t Ä‘áº§u)'}
                   </label>
                   <select className="input-field !text-xs" value={monthOfYear} onChange={e => setMonthOfYear(parseInt(e.target.value) || 1)}>
                     {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
@@ -246,39 +246,39 @@ export default function RecurringTasks({ members, department, userId, taskGroups
 
           {frequency === 'quarterly' && (
             <p className="text-[10px] text-gray-500 -mt-1">
-              → Sẽ sinh ngày {monthday} của: T{monthOfYear}, T{((monthOfYear - 1 + 3) % 12) + 1}, T{((monthOfYear - 1 + 6) % 12) + 1}, T{((monthOfYear - 1 + 9) % 12) + 1}.
+              â†’ Sáº½ sinh ngÃ y {monthday} cá»§a: T{monthOfYear}, T{((monthOfYear - 1 + 3) % 12) + 1}, T{((monthOfYear - 1 + 6) % 12) + 1}, T{((monthOfYear - 1 + 9) % 12) + 1}.
             </p>
           )}
           {frequency === 'semiannual' && (
             <p className="text-[10px] text-gray-500 -mt-1">
-              → Sẽ sinh ngày {monthday} của: T{monthOfYear} và T{((monthOfYear - 1 + 6) % 12) + 1}.
+              â†’ Sáº½ sinh ngÃ y {monthday} cá»§a: T{monthOfYear} vÃ  T{((monthOfYear - 1 + 6) % 12) + 1}.
             </p>
           )}
           {frequency === 'yearly' && (
             <p className="text-[10px] text-gray-500 -mt-1">
-              → Sẽ sinh đúng ngày {monthday}/{monthOfYear} mỗi năm.
+              â†’ Sáº½ sinh Ä‘Ãºng ngÃ y {monthday}/{monthOfYear} má»—i nÄƒm.
             </p>
           )}
 
           <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-200">
-            <label className="block text-[10px] font-semibold text-gray-600 mb-1.5">Deadline của task</label>
+            <label className="block text-[10px] font-semibold text-gray-600 mb-1.5">Deadline cá»§a task</label>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[11px] text-gray-500">Sau khi sinh</span>
               <input type="number" min={0} max={60} className="input-field !text-xs w-16" value={daysOffset} onChange={e => setDaysOffset(parseInt(e.target.value) || 0)} />
-              <span className="text-[11px] text-gray-500">ngày, lúc</span>
+              <span className="text-[11px] text-gray-500">ngÃ y, lÃºc</span>
               <input type="number" min={0} max={23} className="input-field !text-xs w-16" value={hour} onChange={e => setHour(parseInt(e.target.value) || 0)} />
               <span>:</span>
               <input type="number" min={0} max={59} className="input-field !text-xs w-16" value={minute} onChange={e => setMinute(parseInt(e.target.value) || 0)} />
             </div>
             <p className="text-[10px] text-gray-400 mt-1.5">
               {daysOffset === 0
-                ? '→ Deadline ngay trong ngày task được sinh'
-                : `→ Deadline ${daysOffset} ngày sau khi sinh (nhân viên có ${daysOffset + 1} ngày để hoàn thành)`}
+                ? 'â†’ Deadline ngay trong ngÃ y task Ä‘Æ°á»£c sinh'
+                : `â†’ Deadline ${daysOffset} ngÃ y sau khi sinh (nhÃ¢n viÃªn cÃ³ ${daysOffset + 1} ngÃ y Ä‘á»ƒ hoÃ n thÃ nh)`}
             </p>
           </div>
 
           <div>
-            <label className="block text-[10px] text-gray-500 mb-1">Giao cho * ({assignees.length} người)</label>
+            <label className="block text-[10px] text-gray-500 mb-1">Giao cho * ({assignees.length} ngÆ°á»i)</label>
             <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
               {deptMembers.map(m => {
                 const checked = assignees.includes(m.id);
@@ -295,8 +295,8 @@ export default function RecurringTasks({ members, department, userId, taskGroups
           </div>
 
           <div>
-            <label className="block text-[10px] text-gray-500 mb-1">Người theo dõi ({watchers.length} người, tùy chọn)</label>
-            <p className="text-[10px] text-gray-400 mb-1.5">Chỉ nhận thông báo khi task được sinh, không bị tính là người làm.</p>
+            <label className="block text-[10px] text-gray-500 mb-1">NgÆ°á»i theo dÃµi ({watchers.length} ngÆ°á»i, tÃ¹y chá»n)</label>
+            <p className="text-[10px] text-gray-400 mb-1.5">Chá»‰ nháº­n thÃ´ng bÃ¡o khi task Ä‘Æ°á»£c sinh, khÃ´ng bá»‹ tÃ­nh lÃ  ngÆ°á»i lÃ m.</p>
             <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
               {deptMembers.map(m => {
                 const checked = watchers.includes(m.id);
@@ -306,7 +306,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
                     <input type="checkbox" disabled={isAssignee} checked={checked} onChange={() => setWatchers(p => checked ? p.filter(x => x !== m.id) : [...p, m.id])} className="accent-blue-600" />
                     <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold" style={{ background: m.avatar_color || '#f3f4f6' }}>{ini(m.name)}</div>
                     <span className="flex-1">{m.name}</span>
-                    <span className="text-[9px] text-gray-400">{isAssignee ? 'Đã là người làm' : (m.role === 'director' ? 'Tổng GĐ' : m.role === 'accountant' ? 'Kế toán' : m.position)}</span>
+                    <span className="text-[9px] text-gray-400">{isAssignee ? 'ÄÃ£ lÃ  ngÆ°á»i lÃ m' : (m.role === 'director' ? 'Tá»•ng GÄ' : m.role === 'accountant' ? 'Káº¿ toÃ¡n' : m.position)}</span>
                   </label>
                 );
               })}
@@ -314,20 +314,20 @@ export default function RecurringTasks({ members, department, userId, taskGroups
           </div>
 
           <div>
-            <label className="block text-[10px] text-gray-500 mb-0.5">Checklist mặc định (mỗi dòng 1 bước, tùy chọn)</label>
-            <textarea className="input-field !text-xs font-mono" rows={5} placeholder="Bật đèn + máy lạnh&#10;Lau quầy lễ tân&#10;Kiểm máy POS&#10;Đếm tiền quỹ đầu ngày" value={chkLines} onChange={e => setChkLines(e.target.value)} />
-            <p className="text-[10px] text-gray-400 mt-1">Mỗi lần task được sinh, các bước này sẽ tự động xuất hiện trong checklist.</p>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Checklist máº·c Ä‘á»‹nh (má»—i dÃ²ng 1 bÆ°á»›c, tÃ¹y chá»n)</label>
+            <textarea className="input-field !text-xs font-mono" rows={5} placeholder="Báº­t Ä‘Ã¨n + mÃ¡y láº¡nh&#10;Lau quáº§y lá»… tÃ¢n&#10;Kiá»ƒm mÃ¡y POS&#10;Äáº¿m tiá»n quá»¹ Ä‘áº§u ngÃ y" value={chkLines} onChange={e => setChkLines(e.target.value)} />
+            <p className="text-[10px] text-gray-400 mt-1">Má»—i láº§n task Ä‘Æ°á»£c sinh, cÃ¡c bÆ°á»›c nÃ y sáº½ tá»± Ä‘á»™ng xuáº¥t hiá»‡n trong checklist.</p>
           </div>
 
           <div>
-            <label className="block text-[10px] text-gray-500 mb-1">Đính kèm mặc định (file/hình — tùy chọn)</label>
+            <label className="block text-[10px] text-gray-500 mb-1">ÄÃ­nh kÃ¨m máº·c Ä‘á»‹nh (file/hÃ¬nh â€” tÃ¹y chá»n)</label>
             <div className="space-y-1.5">
               {existingFiles.map((f, i) => (
                 <div key={'e' + i} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50">
                   <span className="text-sm flex-shrink-0">{getFileIcon(f.file_name)}</span>
                   <a href={f.file_url} target="_blank" rel="noreferrer" className="text-xs text-gray-700 truncate flex-1 hover:text-emerald-700 hover:underline">{f.file_name}</a>
                   <span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.file_size)}</span>
-                  <button type="button" onClick={() => removeExistingFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0" title="Bỏ file này khỏi template">
+                  <button type="button" onClick={() => removeExistingFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0" title="Bá» file nÃ y khá»i template">
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -336,33 +336,33 @@ export default function RecurringTasks({ members, department, userId, taskGroups
                 <div key={'n' + i} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50">
                   <span className="text-sm flex-shrink-0">{getFileIcon(f.name)}</span>
                   <span className="text-xs text-gray-700 truncate flex-1">{f.name}</span>
-                  <span className="text-[9px] text-emerald-700 flex-shrink-0 font-semibold">MỚI</span>
+                  <span className="text-[9px] text-emerald-700 flex-shrink-0 font-semibold">Má»šI</span>
                   <span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.size)}</span>
-                  <button type="button" onClick={() => removeNewFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0" title="Xóa file">
+                  <button type="button" onClick={() => removeNewFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0" title="XÃ³a file">
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
               ))}
               <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer transition-colors">
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                <span className="text-xs text-gray-500">Chọn file (có thể chọn nhiều)</span>
+                <span className="text-xs text-gray-500">Chá»n file (cÃ³ thá»ƒ chá»n nhiá»u)</span>
                 <input type="file" multiple className="hidden" onChange={handleAddFile} />
               </label>
             </div>
-            <p className="text-[10px] text-gray-400 mt-1">Mỗi lần task được sinh, các file này sẽ tự đính kèm vào task. Phù hợp cho mẫu form, hình hướng dẫn, checklist PDF.</p>
+            <p className="text-[10px] text-gray-400 mt-1">Má»—i láº§n task Ä‘Æ°á»£c sinh, cÃ¡c file nÃ y sáº½ tá»± Ä‘Ã­nh kÃ¨m vÃ o task. PhÃ¹ há»£p cho máº«u form, hÃ¬nh hÆ°á»›ng dáº«n, checklist PDF.</p>
           </div>
 
           <div className="flex gap-2 justify-end">
-            <button onClick={() => { setShowForm(false); resetForm(); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">Hủy</button>
-            <button onClick={save} disabled={uploading} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>{uploading ? 'Đang upload...' : (editing ? 'Cập nhật' : 'Tạo')}</button>
+            <button onClick={() => { setShowForm(false); resetForm(); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">Há»§y</button>
+            <button onClick={save} disabled={uploading} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#123524' }}>{uploading ? 'Äang upload...' : (editing ? 'Cáº­p nháº­t' : 'Táº¡o')}</button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="card p-6 text-center text-sm text-gray-400">Đang tải...</div>
+        <div className="card p-6 text-center text-sm text-gray-400">Äang táº£i...</div>
       ) : list.length === 0 ? (
-        <div className="card p-6 text-center text-sm text-gray-400">Chưa có template nào. Bấm "+ Tạo template" để bắt đầu.</div>
+        <div className="card p-6 text-center text-sm text-gray-400">ChÆ°a cÃ³ template nÃ o. Báº¥m "+ Táº¡o template" Ä‘á»ƒ báº¯t Ä‘áº§u.</div>
       ) : (
         <div className="space-y-2">
           {list.map(r => (
@@ -371,16 +371,16 @@ export default function RecurringTasks({ members, department, userId, taskGroups
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h4 className="text-sm font-semibold">{r.title}</h4>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold text-white" style={{ background: '#2D5A3D' }}>{FREQ[r.frequency]}</span>
-                    {!r.active && <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-semibold">TẠM DỪNG</span>}
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold text-white" style={{ background: '#123524' }}>{FREQ[r.frequency]}</span>
+                    {!r.active && <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-semibold">Táº M Dá»ªNG</span>}
                   </div>
                   <p className="text-[11px] text-gray-500 mt-0.5">{describeSchedule(r)}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{(r.assignee_ids || []).length} người làm · {(r.watcher_ids || []).length} theo dõi · {(r.default_checklist || []).length} bước · {(Array.isArray(r.default_files) ? r.default_files.length : 0)} file · sinh lần cuối: {r.last_generated_date || 'chưa'}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{(r.assignee_ids || []).length} ngÆ°á»i lÃ m Â· {(r.watcher_ids || []).length} theo dÃµi Â· {(r.default_checklist || []).length} bÆ°á»›c Â· {(Array.isArray(r.default_files) ? r.default_files.length : 0)} file Â· sinh láº§n cuá»‘i: {r.last_generated_date || 'chÆ°a'}</p>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <button onClick={() => openEdit(r)} className="text-[10px] px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100">Sửa</button>
-                  <button onClick={() => toggleActive(r)} className="text-[10px] px-2 py-1 rounded bg-yellow-50 text-yellow-700 font-semibold hover:bg-yellow-100">{r.active ? 'Tạm dừng' : 'Bật lại'}</button>
-                  <button onClick={() => remove(r)} className="text-[10px] px-2 py-1 rounded bg-red-50 text-red-700 font-semibold hover:bg-red-100">Xóa</button>
+                  <button onClick={() => openEdit(r)} className="text-[10px] px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100">Sá»­a</button>
+                  <button onClick={() => toggleActive(r)} className="text-[10px] px-2 py-1 rounded bg-yellow-50 text-yellow-700 font-semibold hover:bg-yellow-100">{r.active ? 'Táº¡m dá»«ng' : 'Báº­t láº¡i'}</button>
+                  <button onClick={() => remove(r)} className="text-[10px] px-2 py-1 rounded bg-red-50 text-red-700 font-semibold hover:bg-red-100">XÃ³a</button>
                 </div>
               </div>
             </div>

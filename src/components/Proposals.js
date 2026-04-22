@@ -86,7 +86,7 @@ function MentionInput({ value, setValue, onSend, mentionables, onMention, ini, p
       <input
         ref={inputRef}
         className="input-field !py-1.5 !text-xs w-full"
-        placeholder={placeholder || 'Bình luận... (gõ @ để nhắc tên)'}
+        placeholder={placeholder || 'BÃ¬nh luáº­n... (gÃµ @ Ä‘á»ƒ nháº¯c tÃªn)'}
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
@@ -101,8 +101,8 @@ function MentionInput({ value, setValue, onSend, mentionables, onMention, ini, p
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{m.name}</p>
                 <p className="text-[9px] text-gray-400 truncate">
-                  {m.role === 'director' ? 'Tổng Giám đốc' : m.role === 'accountant' ? 'Kế toán' : (m.position || '')}
-                  {m.department ? ` · ${m.department === 'hotel' ? 'Hotel' : 'Nail'}` : ''}
+                  {m.role === 'director' ? 'Tá»•ng GiÃ¡m Ä‘á»‘c' : m.role === 'accountant' ? 'Káº¿ toÃ¡n' : (m.position || '')}
+                  {m.department ? ` Â· ${m.department === 'hotel' ? 'Hotel' : 'Nail'}` : ''}
                 </p>
               </div>
             </div>
@@ -115,12 +115,12 @@ function MentionInput({ value, setValue, onSend, mentionables, onMention, ini, p
 
 function getFileIcon(name) {
   const ext = (name || '').toLowerCase();
-  if (ext.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/)) return '🖼';
-  if (ext.match(/\.pdf$/)) return '📄';
-  if (ext.match(/\.(doc|docx)$/)) return '📝';
-  if (ext.match(/\.(xls|xlsx|csv)$/)) return '📊';
-  if (ext.match(/\.(ppt|pptx)$/)) return '📽';
-  return '📎';
+  if (ext.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/)) return 'ðŸ–¼';
+  if (ext.match(/\.pdf$/)) return 'ðŸ“„';
+  if (ext.match(/\.(doc|docx)$/)) return 'ðŸ“';
+  if (ext.match(/\.(xls|xlsx|csv)$/)) return 'ðŸ“Š';
+  if (ext.match(/\.(ppt|pptx)$/)) return 'ðŸ“½';
+  return 'ðŸ“Ž';
 }
 
 function formatFileSize(bytes) {
@@ -141,13 +141,13 @@ function parseVND(str) {
 }
 
 const MAIN_TABS = [
-  { id: 'mua_hang', label: 'Mua hàng' },
-  { id: 'thanh_toan', label: 'Thanh toán' },
+  { id: 'mua_hang', label: 'Mua hÃ ng' },
+  { id: 'thanh_toan', label: 'Thanh toÃ¡n' },
 ];
 
 export default function Proposals({ userId, userName, members, department, branch, allowedBranches, canViewAll: canViewAllProp, profile, isDirector, isAccountant, canApprove, focusProposalId, clearFocus }) {
-  // Chi nhánh được chọn khi tạo đề xuất mới. Mặc định = chi nhánh đang xem,
-  // hoặc chi nhánh duy nhất của user nếu chỉ có 1.
+  // Chi nhÃ¡nh Ä‘Æ°á»£c chá»n khi táº¡o Ä‘á» xuáº¥t má»›i. Máº·c Ä‘á»‹nh = chi nhÃ¡nh Ä‘ang xem,
+  // hoáº·c chi nhÃ¡nh duy nháº¥t cá»§a user náº¿u chá»‰ cÃ³ 1.
   const defaultCreateBranch = branch || (department === 'nail' && profile?.branches?.length === 1 ? profile.branches[0] : '');
   const [createBranch, setCreateBranch] = useState(defaultCreateBranch);
   useEffect(() => { setCreateBranch(branch || (department === 'nail' && profile?.branches?.length === 1 ? profile.branches[0] : '')); }, [branch, department, profile]);
@@ -163,11 +163,11 @@ export default function Proposals({ userId, userName, members, department, branc
   const [watcherIds, setWatcherIds] = useState([]);
   const [files, setFiles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
-  // Bảng chi tiết mặt hàng (cả Mua hàng + Thanh toán). Không bắt buộc.
-  // Mỗi dòng: { name, unit, quantity, unit_price, note, files: [{name,url,type,size}] }.
-  // Tổng giá = quantity * unit_price (tính runtime). Files: upload Supabase storage, lưu URL.
+  // Báº£ng chi tiáº¿t máº·t hÃ ng (cáº£ Mua hÃ ng + Thanh toÃ¡n). KhÃ´ng báº¯t buá»™c.
+  // Má»—i dÃ²ng: { name, unit, quantity, unit_price, note, files: [{name,url,type,size}] }.
+  // Tá»•ng giÃ¡ = quantity * unit_price (tÃ­nh runtime). Files: upload Supabase storage, lÆ°u URL.
   const [items, setItems] = useState([{ name: '', unit: '', quantity: '', unit_price: '', note: '', files: [] }]);
-  // Track index các dòng đang upload file để disable button.
+  // Track index cÃ¡c dÃ²ng Ä‘ang upload file Ä‘á»ƒ disable button.
   const [uploadingItemIdx, setUploadingItemIdx] = useState(null);
   const [expanded, setExpanded] = useState(null);
   const [comments, setComments] = useState({});
@@ -179,7 +179,7 @@ export default function Proposals({ userId, userName, members, department, branc
   const [dateTo, setDateTo] = useState('');
   const [filterCat, setFilterCat] = useState('all');
 
-  // Chi nhánh user được phép tạo đề xuất cho (TGĐ/KT: 4 cn, admin: cn phụ trách, member: 1 cn).
+  // Chi nhÃ¡nh user Ä‘Æ°á»£c phÃ©p táº¡o Ä‘á» xuáº¥t cho (TGÄ/KT: 4 cn, admin: cn phá»¥ trÃ¡ch, member: 1 cn).
   const createBranchOptions = (department === 'nail')
     ? (canViewAllProp ? NAIL_BRANCHES.map(b => b.id) : (Array.isArray(profile?.branches) ? profile.branches : []))
     : [];
@@ -187,7 +187,7 @@ export default function Proposals({ userId, userName, members, department, branc
   const deptMembers = members.filter(m => m.department === department || m.role === 'director' || m.role === 'accountant');
   const approvers = deptMembers.filter(m => m.id !== userId && (m.role === 'director' || m.role === 'accountant'));
   const watcherOptions = deptMembers.filter(m => m.id !== userId && !approverIds.includes(m.id));
-  // Người có thể được @mention trong bình luận đề xuất: cùng phòng ban + TGĐ/Kế toán, loại bỏ chính mình.
+  // NgÆ°á»i cÃ³ thá»ƒ Ä‘Æ°á»£c @mention trong bÃ¬nh luáº­n Ä‘á» xuáº¥t: cÃ¹ng phÃ²ng ban + TGÄ/Káº¿ toÃ¡n, loáº¡i bá» chÃ­nh mÃ¬nh.
   const mentionables = deptMembers.filter(m => m.id !== userId);
 
   useEffect(() => { fetchAll(); }, [department, dateFrom, dateTo]);
@@ -225,7 +225,7 @@ export default function Proposals({ userId, userName, members, department, branc
     const contentText = newComment.trim();
     await supabase.from('comments').insert({ proposal_id: pid, user_id: userId, content: contentText, files: uploadedFiles.length > 0 ? uploadedFiles : null });
 
-    // Gửi thông báo cho những người được @mention trong bình luận đề xuất
+    // Gá»­i thÃ´ng bÃ¡o cho nhá»¯ng ngÆ°á»i Ä‘Æ°á»£c @mention trong bÃ¬nh luáº­n Ä‘á» xuáº¥t
     try {
       const proposal = proposals.find(p => p.id === pid);
       const pTitle = proposal?.title || '';
@@ -238,11 +238,11 @@ export default function Proposals({ userId, userName, members, department, branc
         await supabase.from('notifications').insert({
           user_id: mid,
           type: 'mention',
-          title: 'Bạn được nhắc đến',
-          message: `${userName || 'Ai đó'} đã nhắc bạn trong đề xuất "${pTitle}"`,
+          title: 'Báº¡n Ä‘Æ°á»£c nháº¯c Ä‘áº¿n',
+          message: `${userName || 'Ai Ä‘Ã³'} Ä‘Ã£ nháº¯c báº¡n trong Ä‘á» xuáº¥t "${pTitle}"`,
           proposal_id: pid,
         });
-        sendPush(mid, 'Bạn được nhắc đến', `${userName || 'Ai đó'} nhắc bạn trong đề xuất "${pTitle}"`, { url: '/dashboard', tag: 'mention-p-' + pid });
+        sendPush(mid, 'Báº¡n Ä‘Æ°á»£c nháº¯c Ä‘áº¿n', `${userName || 'Ai Ä‘Ã³'} nháº¯c báº¡n trong Ä‘á» xuáº¥t "${pTitle}"`, { url: '/dashboard', tag: 'mention-p-' + pid });
       }
     } catch (e) { /* ignore notification errors */ }
 
@@ -268,14 +268,14 @@ export default function Proposals({ userId, userName, members, department, branc
   }
   function removeCommentFile(index) { setCommentFiles(prev => prev.filter((_, i) => i !== index)); }
 
-  // ================= ITEMS (bảng chi tiết mặt hàng) =================
+  // ================= ITEMS (báº£ng chi tiáº¿t máº·t hÃ ng) =================
   const EMPTY_ITEM = { name: '', unit: '', quantity: '', unit_price: '', note: '', files: [] };
   function addItem() { setItems(prev => [...prev, { ...EMPTY_ITEM, files: [] }]); }
   function removeItem(idx) { setItems(prev => prev.filter((_, i) => i !== idx)); }
   function updateItem(idx, field, value) {
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   }
-  // Parse number từ chuỗi "1.234.567" hoặc "1234567" hoặc "1,5" → number.
+  // Parse number tá»« chuá»—i "1.234.567" hoáº·c "1234567" hoáº·c "1,5" â†’ number.
   function parseNum(v) {
     if (v === null || v === undefined || v === '') return 0;
     const s = String(v).replace(/\./g, '').replace(',', '.');
@@ -285,7 +285,7 @@ export default function Proposals({ userId, userName, members, department, branc
   function itemTotal(it) { return parseNum(it.quantity) * parseNum(it.unit_price); }
   function itemsGrandTotal(list) { return (list || []).reduce((s, it) => s + itemTotal(it), 0); }
 
-  // Upload nhiều file cho 1 dòng item. Lưu URL vào item.files.
+  // Upload nhiá»u file cho 1 dÃ²ng item. LÆ°u URL vÃ o item.files.
   async function handleItemFileUpload(itemIdx, e) {
     const chosen = Array.from(e.target.files || []);
     e.target.value = '';
@@ -296,7 +296,7 @@ export default function Proposals({ userId, userName, members, department, branc
       const safeName = f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
       const path = `proposals/items/${Date.now()}_${safeName}`;
       const { error } = await supabase.storage.from('attachments').upload(path, f);
-      if (error) { toast('Lỗi upload ' + f.name + ': ' + error.message, 'error'); continue; }
+      if (error) { toast('Lá»—i upload ' + f.name + ': ' + error.message, 'error'); continue; }
       const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(path);
       newFiles.push({ name: f.name, url: publicUrl, type: f.type, size: f.size });
     }
@@ -304,7 +304,7 @@ export default function Proposals({ userId, userName, members, department, branc
       setItems(prev => prev.map((it, i) => i === itemIdx
         ? { ...it, files: [...(it.files || []), ...newFiles] }
         : it));
-      toast(`Đã đính kèm ${newFiles.length} file cho dòng #${itemIdx + 1}`, 'success');
+      toast(`ÄÃ£ Ä‘Ã­nh kÃ¨m ${newFiles.length} file cho dÃ²ng #${itemIdx + 1}`, 'success');
     }
     setUploadingItemIdx(null);
   }
@@ -316,16 +316,16 @@ export default function Proposals({ userId, userName, members, department, branc
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!title.trim()) return toast('Nhập tiêu đề', 'error');
-    if (approverIds.length === 0) return toast('Chọn người duyệt', 'error');
+    if (!title.trim()) return toast('Nháº­p tiÃªu Ä‘á»', 'error');
+    if (approverIds.length === 0) return toast('Chá»n ngÆ°á»i duyá»‡t', 'error');
     if (department === 'nail' && createBranchOptions.length > 0 && !createBranch) {
-      return toast('Chọn chi nhánh cho đề xuất', 'error');
+      return toast('Chá»n chi nhÃ¡nh cho Ä‘á» xuáº¥t', 'error');
     }
     setSubmitting(true);
-    const tabLabel = MAIN_TABS.find(t => t.id === activeTab)?.label || 'Mua hàng';
+    const tabLabel = MAIN_TABS.find(t => t.id === activeTab)?.label || 'Mua hÃ ng';
     const catName = catId ? (categories.find(c => c.id === catId)?.name || tabLabel) : tabLabel;
     const costRaw = parseVND(costDisplay);
-    // Làm sạch items: chỉ giữ dòng có tên mặt hàng, parse số từ chuỗi format VND.
+    // LÃ m sáº¡ch items: chá»‰ giá»¯ dÃ²ng cÃ³ tÃªn máº·t hÃ ng, parse sá»‘ tá»« chuá»—i format VND.
     const cleanItems = items
       .filter(it => it.name && it.name.trim())
       .map(it => ({
@@ -342,16 +342,16 @@ export default function Proposals({ userId, userName, members, department, branc
       department, branch: department === 'nail' ? (createBranch || null) : null, created_by: userId,
       items: cleanItems,
     }).select().single();
-    if (error) { toast('Lỗi: ' + error.message, 'error'); setSubmitting(false); return; }
+    if (error) { toast('Lá»—i: ' + error.message, 'error'); setSubmitting(false); return; }
     for (const aid of approverIds) {
       await supabase.from('proposal_approvers').insert({ proposal_id: p.id, user_id: aid });
-      await supabase.from('notifications').insert({ user_id: aid, type: 'approval_request', title: 'Đề xuất cần duyệt', message: `${userName}: "${title}"`, proposal_id: p.id });
-      sendPush(aid, '📝 Đề xuất cần duyệt', `${userName}: "${title}"`, { url: '/dashboard', tag: 'proposal-' + p.id });
+      await supabase.from('notifications').insert({ user_id: aid, type: 'approval_request', title: 'Äá» xuáº¥t cáº§n duyá»‡t', message: `${userName}: "${title}"`, proposal_id: p.id });
+      sendPush(aid, 'ðŸ“ Äá» xuáº¥t cáº§n duyá»‡t', `${userName}: "${title}"`, { url: '/dashboard', tag: 'proposal-' + p.id });
     }
     for (const wid of watcherIds) {
       await supabase.from('proposal_watchers').insert({ proposal_id: p.id, user_id: wid });
-      await supabase.from('notifications').insert({ user_id: wid, type: 'info', title: 'Đề xuất để theo dõi', message: `${userName}: "${title}"`, proposal_id: p.id });
-      sendPush(wid, '👁 Đề xuất theo dõi', `${userName}: "${title}"`, { url: '/dashboard', tag: 'proposal-w-' + p.id });
+      await supabase.from('notifications').insert({ user_id: wid, type: 'info', title: 'Äá» xuáº¥t Ä‘á»ƒ theo dÃµi', message: `${userName}: "${title}"`, proposal_id: p.id });
+      sendPush(wid, 'ðŸ‘ Äá» xuáº¥t theo dÃµi', `${userName}: "${title}"`, { url: '/dashboard', tag: 'proposal-w-' + p.id });
     }
     for (const f of files) {
       const path = `proposals/${p.id}/${Date.now()}_${f.name}`;
@@ -362,7 +362,7 @@ export default function Proposals({ userId, userName, members, department, branc
       }
     }
     logActivity({ userId, userName, action: ACTIONS.PROPOSAL_CREATED, targetType: 'proposal', targetId: p.id, targetTitle: title.trim(), details: { category: catName, cost: costRaw ? parseInt(costRaw) : null }, department, branch: department === 'nail' ? (createBranch || null) : null });
-    toast('Đã gửi đề xuất!', 'success');
+    toast('ÄÃ£ gá»­i Ä‘á» xuáº¥t!', 'success');
     setTitle(''); setDesc(''); setCostDisplay(''); setApproverIds([]); setWatcherIds([]); setFiles([]); setCatId('');
     setItems([{ ...EMPTY_ITEM }]);
     setShowForm(false); setSubmitting(false); fetchAll();
@@ -371,12 +371,12 @@ export default function Proposals({ userId, userName, members, department, branc
   async function handleDeleteProposal(pid, pTitle) {
     if (!isDirector) return;
     const ok = typeof window !== 'undefined' && window.confirm(
-      `⚠ XOÁ VĨNH VIỄN đề xuất này?\n\n"${pTitle}"\n\nSẽ xoá cả: người duyệt, người theo dõi, file đính kèm, bình luận. KHÔNG thể khôi phục.`
+      `âš  XOÃ VÄ¨NH VIá»„N Ä‘á» xuáº¥t nÃ y?\n\n"${pTitle}"\n\nSáº½ xoÃ¡ cáº£: ngÆ°á»i duyá»‡t, ngÆ°á»i theo dÃµi, file Ä‘Ã­nh kÃ¨m, bÃ¬nh luáº­n. KHÃ”NG thá»ƒ khÃ´i phá»¥c.`
     );
     if (!ok) return;
     const { error } = await deleteProposalCascade(pid, userId);
-    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
-    toast('Đã xoá đề xuất', 'success');
+    if (error) { toast('Lá»—i: ' + error.message, 'error'); return; }
+    toast('ÄÃ£ xoÃ¡ Ä‘á» xuáº¥t', 'success');
     fetchAll();
   }
 
@@ -390,29 +390,29 @@ export default function Proposals({ userId, userName, members, department, branc
     const proposal = proposals.find(p => p.id === pid);
     if (proposal && proposal.created_by !== uid) {
       const approverName = members.find(m => m.id === uid)?.name || '';
-      const statusText = action === 'approved' ? '✅ đã duyệt' : '❌ đã từ chối';
-      sendPush(proposal.created_by, `Đề xuất ${statusText}`, `${approverName} ${statusText}: "${proposal.title}"`, { url: '/dashboard', tag: 'approval-' + pid });
-      await supabase.from('notifications').insert({ user_id: proposal.created_by, type: action === 'approved' ? 'approved' : 'rejected', title: `Đề xuất ${statusText}`, message: `${approverName} ${statusText}: "${proposal.title}"`, proposal_id: pid });
+      const statusText = action === 'approved' ? 'âœ… Ä‘Ã£ duyá»‡t' : 'âŒ Ä‘Ã£ tá»« chá»‘i';
+      sendPush(proposal.created_by, `Äá» xuáº¥t ${statusText}`, `${approverName} ${statusText}: "${proposal.title}"`, { url: '/dashboard', tag: 'approval-' + pid });
+      await supabase.from('notifications').insert({ user_id: proposal.created_by, type: action === 'approved' ? 'approved' : 'rejected', title: `Äá» xuáº¥t ${statusText}`, message: `${approverName} ${statusText}: "${proposal.title}"`, proposal_id: pid });
     }
     const pObj = proposals.find(pr => pr.id === pid);
     logActivity({ userId: uid, userName: members.find(m => m.id === uid)?.name, action: action === 'approved' ? ACTIONS.PROPOSAL_APPROVED : ACTIONS.PROPOSAL_REJECTED, targetType: 'proposal', targetId: pid, targetTitle: pObj?.title, department: pObj?.department });
-    toast(action === 'approved' ? 'Đã duyệt!' : 'Đã từ chối', 'success'); fetchAll();
+    toast(action === 'approved' ? 'ÄÃ£ duyá»‡t!' : 'ÄÃ£ tá»« chá»‘i', 'success'); fetchAll();
   }
 
   const ini = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
-  const fmtCost = c => c ? new Intl.NumberFormat('vi-VN').format(c) + 'đ' : '';
+  const fmtCost = c => c ? new Intl.NumberFormat('vi-VN').format(c) + 'Ä‘' : '';
   const fmtDT = d => { if (!d) return ''; const dt = new Date(d); return dt.toLocaleDateString('vi-VN') + ' ' + dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); };
   const timeAgo = d => { const m = Math.floor((Date.now() - new Date(d)) / 60000); if (m < 60) return `${m}p`; const h = Math.floor(m / 60); if (h < 24) return `${h}h`; return `${Math.floor(h / 24)}d`; };
-  const STS = { pending: { l: 'Chờ duyệt', c: '#d97706' }, partial: { l: 'Đang duyệt', c: '#2563eb' }, approved: { l: 'Đã duyệt', c: '#16a34a' }, rejected: { l: 'Từ chối', c: '#dc2626' } };
+  const STS = { pending: { l: 'Chá» duyá»‡t', c: '#d97706' }, partial: { l: 'Äang duyá»‡t', c: '#2563eb' }, approved: { l: 'ÄÃ£ duyá»‡t', c: '#16a34a' }, rejected: { l: 'Tá»« chá»‘i', c: '#dc2626' } };
 
   const tabLabel = MAIN_TABS.find(t => t.id === activeTab)?.label;
 
-  // Visibility rule theo chi nhánh + vai trò.
-  // - TGĐ & Kế toán: toàn bộ (đã lọc theo dept & branch ở query).
-  // - Quản lý (admin): toàn bộ đề xuất trong chi nhánh mình phụ trách.
-  // - Nhân viên (member): chỉ đề xuất liên quan (creator, approver, watcher).
+  // Visibility rule theo chi nhÃ¡nh + vai trÃ².
+  // - TGÄ & Káº¿ toÃ¡n: toÃ n bá»™ (Ä‘Ã£ lá»c theo dept & branch á»Ÿ query).
+  // - Quáº£n lÃ½ (admin): toÃ n bá»™ Ä‘á» xuáº¥t trong chi nhÃ¡nh mÃ¬nh phá»¥ trÃ¡ch.
+  // - NhÃ¢n viÃªn (member): chá»‰ Ä‘á» xuáº¥t liÃªn quan (creator, approver, watcher).
   const canViewAll = isDirector || isAccountant;
-  // Lọc theo chi nhánh đang xem (nếu có branch prop) hoặc các chi nhánh được phép.
+  // Lá»c theo chi nhÃ¡nh Ä‘ang xem (náº¿u cÃ³ branch prop) hoáº·c cÃ¡c chi nhÃ¡nh Ä‘Æ°á»£c phÃ©p.
   let branchScoped = proposals;
   if (department === 'nail') {
     if (branch) {
@@ -431,25 +431,25 @@ export default function Proposals({ userId, userName, members, department, branc
       );
 
   const tabProposals = visibleProposals.filter(p => {
-    if (activeTab === 'thanh_toan') return p.category_name === 'Thanh toán';
-    return p.category_name !== 'Thanh toán';
+    if (activeTab === 'thanh_toan') return p.category_name === 'Thanh toÃ¡n';
+    return p.category_name !== 'Thanh toÃ¡n';
   });
   const filteredProposals = filterCat === 'all' ? tabProposals : tabProposals.filter(p => p.category_name === filterCat);
   const subCatCounts = {};
   tabProposals.forEach(p => { subCatCounts[p.category_name] = (subCatCounts[p.category_name] || 0) + 1; });
 
-  // Auto expand + scroll khi mở đề xuất từ notification.
+  // Auto expand + scroll khi má»Ÿ Ä‘á» xuáº¥t tá»« notification.
   useEffect(() => {
     if (!focusProposalId) return;
     const target = proposals.find(p => p.id === focusProposalId);
     if (!target) return;
-    // Chuyển đúng main tab (mua hàng / thanh toán) để đề xuất hiển thị.
-    if (target.category_name === 'Thanh toán') {
+    // Chuyá»ƒn Ä‘Ãºng main tab (mua hÃ ng / thanh toÃ¡n) Ä‘á»ƒ Ä‘á» xuáº¥t hiá»ƒn thá»‹.
+    if (target.category_name === 'Thanh toÃ¡n') {
       if (activeTab !== 'thanh_toan') setActiveTab('thanh_toan');
     } else {
       if (activeTab !== 'mua_hang') setActiveTab('mua_hang');
     }
-    // Reset filter category để chắc chắn render.
+    // Reset filter category Ä‘á»ƒ cháº¯c cháº¯n render.
     if (filterCat !== 'all' && target.category_name !== filterCat) setFilterCat('all');
     setExpanded(focusProposalId);
     if (!comments[focusProposalId]) loadComments(focusProposalId);
@@ -469,45 +469,45 @@ export default function Proposals({ userId, userName, members, department, branc
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-4">
-        <div className="flex gap-0.5 p-0.5 rounded-xl" style={{ background: '#f0ebe4' }}>
+        <div className="flex gap-0.5 p-0.5 rounded-xl" style={{ background: '#F3EFE4' }}>
           {MAIN_TABS.map(t => (
             <button key={t.id} onClick={() => { setActiveTab(t.id); setFilterCat('all'); }}
               className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${activeTab === t.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
               {t.label}
               <span className="ml-1.5 text-[10px] font-normal text-gray-400">
-                ({visibleProposals.filter(p => t.id === 'thanh_toan' ? p.category_name === 'Thanh toán' : p.category_name !== 'Thanh toán').length})
+                ({visibleProposals.filter(p => t.id === 'thanh_toan' ? p.category_name === 'Thanh toÃ¡n' : p.category_name !== 'Thanh toÃ¡n').length})
               </span>
             </button>
           ))}
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white" style={{ background: '#2D5A3D' }}>+ Tạo đề xuất</button>
+        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white" style={{ background: '#123524' }}>+ Táº¡o Ä‘á» xuáº¥t</button>
       </div>
 
       <div className="flex gap-2 mb-4 items-center flex-wrap">
         {Object.keys(subCatCounts).length > 1 && (
           <>
-            <button onClick={() => setFilterCat('all')} className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${filterCat === 'all' ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`} style={filterCat === 'all' ? { background: '#2D5A3D' } : {}}>Tất cả ({tabProposals.length})</button>
+            <button onClick={() => setFilterCat('all')} className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${filterCat === 'all' ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`} style={filterCat === 'all' ? { background: '#123524' } : {}}>Táº¥t cáº£ ({tabProposals.length})</button>
             {Object.entries(subCatCounts).map(([name, count]) => (
-              <button key={name} onClick={() => setFilterCat(name)} className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${filterCat === name ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`} style={filterCat === name ? { background: '#2D5A3D' } : {}}>{name} ({count})</button>
+              <button key={name} onClick={() => setFilterCat(name)} className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${filterCat === name ? 'text-white' : 'bg-white border border-gray-200 text-gray-500'}`} style={filterCat === name ? { background: '#123524' } : {}}>{name} ({count})</button>
             ))}
             <span className="text-gray-300">|</span>
           </>
         )}
-        <span className="text-[11px] text-gray-500">Thời gian:</span>
+        <span className="text-[11px] text-gray-500">Thá»i gian:</span>
         <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-        <span className="text-xs text-gray-400">→</span>
+        <span className="text-xs text-gray-400">â†’</span>
         <input type="date" className="input-field !py-1.5 !text-xs !w-auto" value={dateTo} onChange={e => setDateTo(e.target.value)} />
-        {(dateFrom || dateTo) && <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-xs text-red-500 hover:underline">Xóa</button>}
+        {(dateFrom || dateTo) && <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-xs text-red-500 hover:underline">XÃ³a</button>}
       </div>
 
       {showForm && (
         <div className="card p-5 mb-5 animate-slide-up">
-          <h3 className="font-semibold text-sm mb-1">Tạo đề xuất — {tabLabel}</h3>
-          <p className="text-[11px] text-gray-400 mb-4">Đề xuất sẽ được lưu vào tab &quot;{tabLabel}&quot;</p>
+          <h3 className="font-semibold text-sm mb-1">Táº¡o Ä‘á» xuáº¥t â€” {tabLabel}</h3>
+          <p className="text-[11px] text-gray-400 mb-4">Äá» xuáº¥t sáº½ Ä‘Æ°á»£c lÆ°u vÃ o tab &quot;{tabLabel}&quot;</p>
           <form onSubmit={handleSubmit} className="space-y-3">
             {department === 'nail' && createBranchOptions.length > 0 && (
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Chi nhánh *</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Chi nhÃ¡nh *</label>
                 {createBranchOptions.length === 1 ? (
                   <div className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold">{branchLabel(createBranchOptions[0])}</div>
                 ) : (
@@ -523,42 +523,42 @@ export default function Proposals({ userId, userName, members, department, branc
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Tiêu đề *</label><input className="input-field !text-sm" value={title} onChange={e => setTitle(e.target.value)} required /></div>
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Phân loại chi tiết</label>
+              <div><label className="block text-xs font-medium text-gray-600 mb-1">TiÃªu Ä‘á» *</label><input className="input-field !text-sm" value={title} onChange={e => setTitle(e.target.value)} required /></div>
+              <div><label className="block text-xs font-medium text-gray-600 mb-1">PhÃ¢n loáº¡i chi tiáº¿t</label>
                 <select className="input-field !text-sm" value={catId} onChange={e => setCatId(e.target.value)}>
-                  <option value="">— {tabLabel} (mặc định) —</option>
+                  <option value="">â€” {tabLabel} (máº·c Ä‘á»‹nh) â€”</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
             </div>
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Mô tả chi tiết</label><textarea className="input-field !text-sm min-h-[70px] resize-y" value={desc} onChange={e => setDesc(e.target.value)} /></div>
+            <div><label className="block text-xs font-medium text-gray-600 mb-1">MÃ´ táº£ chi tiáº¿t</label><textarea className="input-field !text-sm min-h-[70px] resize-y" value={desc} onChange={e => setDesc(e.target.value)} /></div>
 
             {/* Cost input with auto-formatting */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Chi phí dự kiến (VNĐ)</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Chi phÃ­ dá»± kiáº¿n (VNÄ)</label>
               <div className="relative">
                 <input className="input-field !text-sm !pr-12" type="text" inputMode="numeric" value={costDisplay} onChange={handleCostChange} placeholder="VD: 1.022.000" />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">VNĐ</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">VNÄ</span>
               </div>
-              {costDisplay && <p className="text-[10px] text-emerald-600 mt-0.5">{costDisplay} VNĐ</p>}
+              {costDisplay && <p className="text-[10px] text-emerald-600 mt-0.5">{costDisplay} VNÄ</p>}
             </div>
 
-            {/* =================== CHI TIẾT MẶT HÀNG (items) =================== */}
+            {/* =================== CHI TIáº¾T Máº¶T HÃ€NG (items) =================== */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Chi tiết <span className="text-gray-400 font-normal">(tùy chọn — liệt kê từng mặt hàng / khoản chi)</span>
+                Chi tiáº¿t <span className="text-gray-400 font-normal">(tÃ¹y chá»n â€” liá»‡t kÃª tá»«ng máº·t hÃ ng / khoáº£n chi)</span>
               </label>
 
               {/* Desktop: table layout */}
               <div className="hidden md:block border border-gray-200 rounded-xl overflow-hidden">
                 <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-2 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
                   <div className="text-center">#</div>
-                  <div>Tên mặt hàng</div>
-                  <div>ĐVT</div>
-                  <div className="text-right">Số lượng</div>
-                  <div className="text-right">Đơn giá</div>
-                  <div className="text-right">Tổng giá</div>
-                  <div>Ghi chú</div>
+                  <div>TÃªn máº·t hÃ ng</div>
+                  <div>ÄVT</div>
+                  <div className="text-right">Sá»‘ lÆ°á»£ng</div>
+                  <div className="text-right">ÄÆ¡n giÃ¡</div>
+                  <div className="text-right">Tá»•ng giÃ¡</div>
+                  <div>Ghi chÃº</div>
                   <div></div>
                 </div>
                 {items.map((it, idx) => {
@@ -567,21 +567,21 @@ export default function Proposals({ userId, userName, members, department, branc
                   <div key={idx} className="border-b border-gray-100 last:border-b-0">
                     <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-1.5 items-center">
                       <div className="text-center text-xs text-gray-500 font-semibold">{idx + 1}</div>
-                      <input className="input-field !text-xs !py-1.5" placeholder="VD: Nước rửa tay" value={it.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
+                      <input className="input-field !text-xs !py-1.5" placeholder="VD: NÆ°á»›c rá»­a tay" value={it.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
                       <input className="input-field !text-xs !py-1.5" placeholder="chai" value={it.unit} onChange={e => updateItem(idx, 'unit', e.target.value)} />
                       <input className="input-field !text-xs !py-1.5 text-right" inputMode="decimal" placeholder="0" value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} />
                       <input className="input-field !text-xs !py-1.5 text-right" inputMode="numeric" placeholder="0" value={it.unit_price} onChange={e => updateItem(idx, 'unit_price', formatVND(e.target.value))} />
-                      <div className="px-2 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs text-right font-semibold truncate" title={itemTotal(it).toLocaleString('de-DE') + 'đ'}>
-                        {itemTotal(it) > 0 ? itemTotal(it).toLocaleString('de-DE') + 'đ' : '—'}
+                      <div className="px-2 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs text-right font-semibold truncate" title={itemTotal(it).toLocaleString('de-DE') + 'Ä‘'}>
+                        {itemTotal(it) > 0 ? itemTotal(it).toLocaleString('de-DE') + 'Ä‘' : 'â€”'}
                       </div>
-                      <input className="input-field !text-xs !py-1.5" placeholder="Ghi chú..." value={it.note} onChange={e => updateItem(idx, 'note', e.target.value)} />
+                      <input className="input-field !text-xs !py-1.5" placeholder="Ghi chÃº..." value={it.note} onChange={e => updateItem(idx, 'note', e.target.value)} />
                       <button type="button" onClick={() => removeItem(idx)} disabled={items.length <= 1}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
-                        title="Xóa dòng">
+                        title="XÃ³a dÃ²ng">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
                       </button>
                     </div>
-                    {/* File attachments per item - row phụ nằm dưới row chính */}
+                    {/* File attachments per item - row phá»¥ náº±m dÆ°á»›i row chÃ­nh */}
                     <div className="px-2 pb-2 pl-[52px] flex flex-wrap items-center gap-1.5">
                       {itFiles.map((f, fi) => (
                         <a key={fi} href={f.url} target="_blank" rel="noreferrer"
@@ -590,26 +590,26 @@ export default function Proposals({ userId, userName, members, department, branc
                           <span className="flex-shrink-0">{getFileIcon(f.name)}</span>
                           <span className="truncate" title={f.name}>{f.name}</span>
                           <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeItemFile(idx, fi); }}
-                            className="flex-shrink-0 text-red-400 hover:text-red-600 ml-0.5" title="Xóa file">
+                            className="flex-shrink-0 text-red-400 hover:text-red-600 ml-0.5" title="XÃ³a file">
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                           </button>
                         </a>
                       ))}
                       <label className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer text-[10px] text-gray-500 ${uploadingItemIdx === idx ? 'opacity-50 pointer-events-none' : ''}`}>
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                        {uploadingItemIdx === idx ? 'Đang tải...' : (itFiles.length > 0 ? 'Thêm file' : 'Đính kèm file')}
+                        {uploadingItemIdx === idx ? 'Äang táº£i...' : (itFiles.length > 0 ? 'ThÃªm file' : 'ÄÃ­nh kÃ¨m file')}
                         <input type="file" multiple className="hidden" onChange={(e) => handleItemFileUpload(idx, e)} />
                       </label>
                     </div>
                   </div>
                   );
                 })}
-                {/* Tổng cộng hàng cuối */}
+                {/* Tá»•ng cá»™ng hÃ ng cuá»‘i */}
                 {items.some(it => it.name && it.name.trim()) && (
                   <div className="grid grid-cols-[40px_minmax(160px,2fr)_80px_80px_130px_130px_minmax(140px,1.5fr)_40px] gap-1.5 px-2 py-2 bg-emerald-50/50 border-t-2 border-emerald-200 text-xs font-bold">
                     <div></div>
-                    <div className="col-span-4 text-right text-gray-700">Tổng cộng:</div>
-                    <div className="text-right text-emerald-700">{itemsGrandTotal(items).toLocaleString('de-DE')}đ</div>
+                    <div className="col-span-4 text-right text-gray-700">Tá»•ng cá»™ng:</div>
+                    <div className="text-right text-emerald-700">{itemsGrandTotal(items).toLocaleString('de-DE')}Ä‘</div>
                     <div></div>
                     <div></div>
                   </div>
@@ -623,24 +623,24 @@ export default function Proposals({ userId, userName, members, department, branc
                   return (
                   <div key={idx} className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/30">
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase">Dòng #{idx + 1}</span>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase">DÃ²ng #{idx + 1}</span>
                       <button type="button" onClick={() => removeItem(idx)} disabled={items.length <= 1}
-                        className="text-red-400 hover:text-red-600 disabled:opacity-20 disabled:cursor-not-allowed" title="Xóa dòng">
+                        className="text-red-400 hover:text-red-600 disabled:opacity-20 disabled:cursor-not-allowed" title="XÃ³a dÃ²ng">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
                       </button>
                     </div>
                     <div className="space-y-1.5">
-                      <input className="input-field !text-xs !py-1.5" placeholder="Tên mặt hàng *" value={it.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
+                      <input className="input-field !text-xs !py-1.5" placeholder="TÃªn máº·t hÃ ng *" value={it.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
                       <div className="grid grid-cols-2 gap-1.5">
-                        <input className="input-field !text-xs !py-1.5" placeholder="ĐVT (chai, cái...)" value={it.unit} onChange={e => updateItem(idx, 'unit', e.target.value)} />
-                        <input className="input-field !text-xs !py-1.5 text-right" inputMode="decimal" placeholder="Số lượng" value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} />
+                        <input className="input-field !text-xs !py-1.5" placeholder="ÄVT (chai, cÃ¡i...)" value={it.unit} onChange={e => updateItem(idx, 'unit', e.target.value)} />
+                        <input className="input-field !text-xs !py-1.5 text-right" inputMode="decimal" placeholder="Sá»‘ lÆ°á»£ng" value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} />
                       </div>
-                      <input className="input-field !text-xs !py-1.5 text-right" inputMode="numeric" placeholder="Đơn giá" value={it.unit_price} onChange={e => updateItem(idx, 'unit_price', formatVND(e.target.value))} />
+                      <input className="input-field !text-xs !py-1.5 text-right" inputMode="numeric" placeholder="ÄÆ¡n giÃ¡" value={it.unit_price} onChange={e => updateItem(idx, 'unit_price', formatVND(e.target.value))} />
                       <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-50 text-xs">
-                        <span className="text-gray-500">Tổng giá:</span>
-                        <span className="font-semibold text-emerald-700">{itemTotal(it) > 0 ? itemTotal(it).toLocaleString('de-DE') + 'đ' : '—'}</span>
+                        <span className="text-gray-500">Tá»•ng giÃ¡:</span>
+                        <span className="font-semibold text-emerald-700">{itemTotal(it) > 0 ? itemTotal(it).toLocaleString('de-DE') + 'Ä‘' : 'â€”'}</span>
                       </div>
-                      <input className="input-field !text-xs !py-1.5" placeholder="Ghi chú..." value={it.note} onChange={e => updateItem(idx, 'note', e.target.value)} />
+                      <input className="input-field !text-xs !py-1.5" placeholder="Ghi chÃº..." value={it.note} onChange={e => updateItem(idx, 'note', e.target.value)} />
                       {/* File attachments per item - mobile */}
                       <div className="flex flex-wrap items-center gap-1.5 pt-1">
                         {itFiles.map((f, fi) => (
@@ -656,7 +656,7 @@ export default function Proposals({ userId, userName, members, department, branc
                         ))}
                         <label className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer text-[10px] text-gray-500 ${uploadingItemIdx === idx ? 'opacity-50 pointer-events-none' : ''}`}>
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                          {uploadingItemIdx === idx ? 'Đang tải...' : (itFiles.length > 0 ? 'Thêm file' : 'Đính kèm file')}
+                          {uploadingItemIdx === idx ? 'Äang táº£i...' : (itFiles.length > 0 ? 'ThÃªm file' : 'ÄÃ­nh kÃ¨m file')}
                           <input type="file" multiple className="hidden" onChange={(e) => handleItemFileUpload(idx, e)} />
                         </label>
                       </div>
@@ -666,38 +666,38 @@ export default function Proposals({ userId, userName, members, department, branc
                 })}
                 {items.some(it => it.name && it.name.trim()) && (
                   <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 border-2 border-emerald-200">
-                    <span className="text-xs font-bold text-gray-700">Tổng cộng:</span>
-                    <span className="text-sm font-bold text-emerald-700">{itemsGrandTotal(items).toLocaleString('de-DE')}đ</span>
+                    <span className="text-xs font-bold text-gray-700">Tá»•ng cá»™ng:</span>
+                    <span className="text-sm font-bold text-emerald-700">{itemsGrandTotal(items).toLocaleString('de-DE')}Ä‘</span>
                   </div>
                 )}
               </div>
 
               <button type="button" onClick={addItem}
                 className="mt-2 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors"
-                style={{ color: '#2D5A3D' }}>
+                style={{ color: '#123524' }}>
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                Thêm dòng mới
+                ThÃªm dÃ²ng má»›i
               </button>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Người duyệt * <span className="text-gray-400">(TGĐ / Kế toán)</span></label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">NgÆ°á»i duyá»‡t * <span className="text-gray-400">(TGÄ / Káº¿ toÃ¡n)</span></label>
               <div className="border border-gray-200 rounded-xl overflow-hidden">
-                {approvers.length === 0 ? <p className="p-3 text-xs text-gray-400">Chưa có TGĐ hoặc Kế toán</p> : approvers.map(m => (
+                {approvers.length === 0 ? <p className="p-3 text-xs text-gray-400">ChÆ°a cÃ³ TGÄ hoáº·c Káº¿ toÃ¡n</p> : approvers.map(m => (
                   <div key={m.id} onClick={() => setApproverIds(p => p.includes(m.id) ? p.filter(x => x !== m.id) : [...p, m.id])}
                     className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer border-b border-gray-100 last:border-b-0 transition-all ${approverIds.includes(m.id) ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
                     <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${approverIds.includes(m.id) ? 'border-emerald-600 bg-emerald-600' : 'border-gray-300'}`}>
                       {approverIds.includes(m.id) && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                     </div>
                     <div className="w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-semibold" style={{ background: m.avatar_color, color: '#333' }}>{ini(m.name)}</div>
-                    <div className="flex-1"><p className="text-xs font-medium">{m.name}</p><p className="text-[10px] text-gray-400">{m.role === 'director' ? 'Tổng Giám đốc' : 'Kế toán'}</p></div>
+                    <div className="flex-1"><p className="text-xs font-medium">{m.name}</p><p className="text-[10px] text-gray-400">{m.role === 'director' ? 'Tá»•ng GiÃ¡m Ä‘á»‘c' : 'Káº¿ toÃ¡n'}</p></div>
                   </div>
                 ))}
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Người theo dõi <span className="text-gray-400">(chọn nhiều)</span></label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">NgÆ°á»i theo dÃµi <span className="text-gray-400">(chá»n nhiá»u)</span></label>
               <div className="border border-gray-200 rounded-xl max-h-48 overflow-y-auto">
                 {watcherOptions.map(m => (
                   <div key={m.id} onClick={() => setWatcherIds(p => p.includes(m.id) ? p.filter(x => x !== m.id) : [...p, m.id])}
@@ -710,34 +710,34 @@ export default function Proposals({ userId, userName, members, department, branc
                   </div>
                 ))}
               </div>
-              {watcherIds.length > 0 && <p className="text-[10px] text-blue-600 mt-1">{watcherIds.length} người đã chọn</p>}
+              {watcherIds.length > 0 && <p className="text-[10px] text-blue-600 mt-1">{watcherIds.length} ngÆ°á»i Ä‘Ã£ chá»n</p>}
             </div>
 
             {/* File upload - each file on its own line */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Đính kèm file</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">ÄÃ­nh kÃ¨m file</label>
               <div className="space-y-1.5">
                 {files.map((f, i) => (
                   <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50">
                     <span className="text-sm flex-shrink-0">{getFileIcon(f.name)}</span>
                     <span className="text-xs text-gray-700 truncate flex-1">{f.name}</span>
                     <span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.size)}</span>
-                    <button type="button" onClick={() => removeFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0" title="Xóa file">
+                    <button type="button" onClick={() => removeFile(i)} className="text-red-400 hover:text-red-600 flex-shrink-0" title="XÃ³a file">
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   </div>
                 ))}
                 <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 bg-white hover:bg-gray-50 cursor-pointer transition-colors">
                   <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                  <span className="text-xs text-gray-500">Chọn file</span>
+                  <span className="text-xs text-gray-500">Chá»n file</span>
                   <input type="file" multiple className="hidden" onChange={handleAddFile} />
                 </label>
               </div>
             </div>
 
             <div className="flex gap-2">
-              <button type="submit" disabled={submitting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>{submitting ? 'Đang gửi...' : 'Gửi đề xuất'}</button>
-              <button type="button" onClick={() => setShowForm(false)} className="btn-secondary !text-xs">Hủy</button>
+              <button type="submit" disabled={submitting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#123524' }}>{submitting ? 'Äang gá»­i...' : 'Gá»­i Ä‘á» xuáº¥t'}</button>
+              <button type="button" onClick={() => setShowForm(false)} className="btn-secondary !text-xs">Há»§y</button>
             </div>
           </form>
         </div>
@@ -745,7 +745,7 @@ export default function Proposals({ userId, userName, members, department, branc
 
       <div className="space-y-5">
         {(() => {
-          // Nhóm theo ngày tạo (VN) — dễ quan sát "ngày hôm nay, hôm qua, ..."
+          // NhÃ³m theo ngÃ y táº¡o (VN) â€” dá»… quan sÃ¡t "ngÃ y hÃ´m nay, hÃ´m qua, ..."
           const byDay = {};
           for (const p of filteredProposals) {
             const key = (() => {
@@ -768,8 +768,8 @@ export default function Proposals({ userId, userName, members, department, branc
             return vn.toISOString().slice(0, 10);
           })();
           function dayLabel(k) {
-            if (k === todayKey) return 'Hôm nay';
-            if (k === yesterdayKey) return 'Hôm qua';
+            if (k === todayKey) return 'HÃ´m nay';
+            if (k === yesterdayKey) return 'HÃ´m qua';
             const dt = new Date(k + 'T12:00:00Z');
             const w = ['CN','T2','T3','T4','T5','T6','T7'][dt.getUTCDay()];
             return `${w}, ${dt.toLocaleDateString('vi-VN')}`;
@@ -792,7 +792,7 @@ export default function Proposals({ userId, userName, members, department, branc
                     <span className="px-1.5 py-0.5 rounded text-[9px] bg-gray-100 text-gray-500">{p.category_name}</span>
                     {p.branch && <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-50 text-emerald-700 font-semibold">{branchLabel(p.branch)}</span>}
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{p.creator?.name} · {fmtDT(p.created_at)} {p.estimated_cost ? ` · ${fmtCost(p.estimated_cost)}` : ''}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{p.creator?.name} Â· {fmtDT(p.created_at)} {p.estimated_cost ? ` Â· ${fmtCost(p.estimated_cost)}` : ''}</p>
                 </div>
                 <svg className={`w-3.5 h-3.5 text-gray-300 transition-transform mt-1 ${isExp ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
               </div>
@@ -802,29 +802,29 @@ export default function Proposals({ userId, userName, members, department, branc
                     <div className="flex justify-end mb-2">
                       <button onClick={(e) => { e.stopPropagation(); handleDeleteProposal(p.id, p.title); }}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-red-600 hover:bg-red-50 transition-colors"
-                        title="Xoá vĩnh viễn (chỉ TGĐ)">
+                        title="XoÃ¡ vÄ©nh viá»…n (chá»‰ TGÄ)">
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
-                        Xoá đề xuất
+                        XoÃ¡ Ä‘á» xuáº¥t
                       </button>
                     </div>
                   )}
                   {p.description && <p className="text-xs text-gray-600 mb-2 leading-relaxed">{p.description}</p>}
-                  {p.estimated_cost && <p className="text-xs mb-2">Chi phí: <strong>{fmtCost(p.estimated_cost)}</strong></p>}
+                  {p.estimated_cost && <p className="text-xs mb-2">Chi phÃ­: <strong>{fmtCost(p.estimated_cost)}</strong></p>}
 
-                  {/* Chi tiết mặt hàng (readonly) — chỉ hiện nếu có items */}
+                  {/* Chi tiáº¿t máº·t hÃ ng (readonly) â€” chá»‰ hiá»‡n náº¿u cÃ³ items */}
                   {Array.isArray(p.items) && p.items.length > 0 && (
                     <div className="mb-3">
-                      <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Chi tiết ({p.items.length} mặt hàng)</p>
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Chi tiáº¿t ({p.items.length} máº·t hÃ ng)</p>
                       {/* Desktop table */}
                       <div className="hidden md:block border border-gray-200 rounded-lg overflow-hidden">
                         <div className="grid grid-cols-[32px_minmax(120px,2fr)_60px_60px_110px_110px_minmax(100px,1.5fr)] gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200 text-[9px] font-semibold text-gray-500 uppercase">
                           <div className="text-center">#</div>
-                          <div>Tên</div>
-                          <div>ĐVT</div>
+                          <div>TÃªn</div>
+                          <div>ÄVT</div>
                           <div className="text-right">SL</div>
-                          <div className="text-right">Đơn giá</div>
-                          <div className="text-right">Tổng</div>
-                          <div>Ghi chú</div>
+                          <div className="text-right">ÄÆ¡n giÃ¡</div>
+                          <div className="text-right">Tá»•ng</div>
+                          <div>Ghi chÃº</div>
                         </div>
                         {p.items.map((it, idx) => {
                           const itFiles = Array.isArray(it.files) ? it.files : [];
@@ -833,11 +833,11 @@ export default function Proposals({ userId, userName, members, department, branc
                             <div className="grid grid-cols-[32px_minmax(120px,2fr)_60px_60px_110px_110px_minmax(100px,1.5fr)] gap-1 px-2 py-1.5 text-[11px] items-center">
                               <div className="text-center text-gray-400">{idx + 1}</div>
                               <div className="font-medium text-gray-700 truncate" title={it.name}>{it.name}</div>
-                              <div className="text-gray-500">{it.unit || '—'}</div>
+                              <div className="text-gray-500">{it.unit || 'â€”'}</div>
                               <div className="text-right text-gray-600">{Number(it.quantity || 0).toLocaleString('de-DE')}</div>
-                              <div className="text-right text-gray-600">{Number(it.unit_price || 0).toLocaleString('de-DE')}đ</div>
-                              <div className="text-right font-semibold text-emerald-700">{itemTotal(it).toLocaleString('de-DE')}đ</div>
-                              <div className="text-gray-500 truncate" title={it.note}>{it.note || '—'}</div>
+                              <div className="text-right text-gray-600">{Number(it.unit_price || 0).toLocaleString('de-DE')}Ä‘</div>
+                              <div className="text-right font-semibold text-emerald-700">{itemTotal(it).toLocaleString('de-DE')}Ä‘</div>
+                              <div className="text-gray-500 truncate" title={it.note}>{it.note || 'â€”'}</div>
                             </div>
                             {itFiles.length > 0 && (
                               <div className="px-2 pb-1.5 pl-[44px] flex flex-wrap items-center gap-1">
@@ -856,8 +856,8 @@ export default function Proposals({ userId, userName, members, department, branc
                         })}
                         <div className="grid grid-cols-[32px_minmax(120px,2fr)_60px_60px_110px_110px_minmax(100px,1.5fr)] gap-1 px-2 py-1.5 bg-emerald-50/60 border-t-2 border-emerald-200 text-xs font-bold">
                           <div></div>
-                          <div className="col-span-4 text-right text-gray-700">Tổng cộng:</div>
-                          <div className="text-right text-emerald-700">{itemsGrandTotal(p.items).toLocaleString('de-DE')}đ</div>
+                          <div className="col-span-4 text-right text-gray-700">Tá»•ng cá»™ng:</div>
+                          <div className="text-right text-emerald-700">{itemsGrandTotal(p.items).toLocaleString('de-DE')}Ä‘</div>
                           <div></div>
                         </div>
                       </div>
@@ -870,11 +870,11 @@ export default function Proposals({ userId, userName, members, department, branc
                             <div className="flex items-center gap-1.5 mb-1">
                               <span className="text-[9px] font-bold text-gray-400">#{idx + 1}</span>
                               <span className="font-semibold text-gray-800 flex-1 truncate">{it.name}</span>
-                              <span className="font-bold text-emerald-700">{itemTotal(it).toLocaleString('de-DE')}đ</span>
+                              <span className="font-bold text-emerald-700">{itemTotal(it).toLocaleString('de-DE')}Ä‘</span>
                             </div>
                             <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-gray-500">
                               <span>SL: <strong className="text-gray-700">{Number(it.quantity || 0).toLocaleString('de-DE')}</strong>{it.unit && ` ${it.unit}`}</span>
-                              <span>Đơn giá: <strong className="text-gray-700">{Number(it.unit_price || 0).toLocaleString('de-DE')}đ</strong></span>
+                              <span>ÄÆ¡n giÃ¡: <strong className="text-gray-700">{Number(it.unit_price || 0).toLocaleString('de-DE')}Ä‘</strong></span>
                             </div>
                             {it.note && <p className="text-[10px] text-gray-500 mt-0.5 italic">"{it.note}"</p>}
                             {itFiles.length > 0 && (
@@ -892,32 +892,32 @@ export default function Proposals({ userId, userName, members, department, branc
                           );
                         })}
                         <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-50 border-2 border-emerald-200">
-                          <span className="text-[11px] font-bold text-gray-700">Tổng cộng:</span>
-                          <span className="text-xs font-bold text-emerald-700">{itemsGrandTotal(p.items).toLocaleString('de-DE')}đ</span>
+                          <span className="text-[11px] font-bold text-gray-700">Tá»•ng cá»™ng:</span>
+                          <span className="text-xs font-bold text-emerald-700">{itemsGrandTotal(p.items).toLocaleString('de-DE')}Ä‘</span>
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {p.files?.length > 0 && (<div className="mb-3"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">File đính kèm ({p.files.length})</p><div className="space-y-1">{p.files.map(f => <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"><span className="text-sm flex-shrink-0">{getFileIcon(f.file_name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.file_name}</span><span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.file_size)}</span><svg className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></a>)}</div></div>)}
-                  <div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Người duyệt</p>
+                  {p.files?.length > 0 && (<div className="mb-3"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">File Ä‘Ã­nh kÃ¨m ({p.files.length})</p><div className="space-y-1">{p.files.map(f => <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"><span className="text-sm flex-shrink-0">{getFileIcon(f.file_name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.file_name}</span><span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.file_size)}</span><svg className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></a>)}</div></div>)}
+                  <div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">NgÆ°á»i duyá»‡t</p>
                     {p.approvers?.map(a => (
                       <div key={a.id} className="flex items-center gap-2 mb-1">
                         <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold" style={{ background: a.user?.avatar_color, color: '#333' }}>{ini(a.user?.name)}</div>
                         <span className="text-xs flex-1">{a.user?.name}</span>
-                        {a.status === 'approved' && <span className="text-[10px] text-green-600 font-semibold">✓ Duyệt {a.decided_at ? fmtDT(a.decided_at) : ''}</span>}
-                        {a.status === 'rejected' && <span className="text-[10px] text-red-600 font-semibold">✗ Từ chối</span>}
+                        {a.status === 'approved' && <span className="text-[10px] text-green-600 font-semibold">âœ“ Duyá»‡t {a.decided_at ? fmtDT(a.decided_at) : ''}</span>}
+                        {a.status === 'rejected' && <span className="text-[10px] text-red-600 font-semibold">âœ— Tá»« chá»‘i</span>}
                         {a.status === 'pending' && a.user_id === userId && canApprove && (
-                          <div className="flex gap-1"><button onClick={() => handleApprove(p.id, userId, 'approved')} className="px-2 py-0.5 bg-green-600 text-white rounded text-[10px]">Duyệt</button><button onClick={() => handleApprove(p.id, userId, 'rejected')} className="px-2 py-0.5 bg-red-600 text-white rounded text-[10px]">Từ chối</button></div>
+                          <div className="flex gap-1"><button onClick={() => handleApprove(p.id, userId, 'approved')} className="px-2 py-0.5 bg-green-600 text-white rounded text-[10px]">Duyá»‡t</button><button onClick={() => handleApprove(p.id, userId, 'rejected')} className="px-2 py-0.5 bg-red-600 text-white rounded text-[10px]">Tá»« chá»‘i</button></div>
                         )}
-                        {a.status === 'pending' && (a.user_id !== userId || !canApprove) && <span className="text-[10px] text-amber-600">Chờ...</span>}
+                        {a.status === 'pending' && (a.user_id !== userId || !canApprove) && <span className="text-[10px] text-amber-600">Chá»...</span>}
                       </div>
                     ))}
                   </div>
-                  {p.watchers?.length > 0 && (<div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Theo dõi</p><div className="flex gap-1 flex-wrap">{p.watchers.map(w => <span key={w.id} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] text-gray-500">{w.user?.name}</span>)}</div></div>)}
+                  {p.watchers?.length > 0 && (<div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Theo dÃµi</p><div className="flex gap-1 flex-wrap">{p.watchers.map(w => <span key={w.id} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] text-gray-500">{w.user?.name}</span>)}</div></div>)}
                   <div className="mt-2 pt-2 border-t border-gray-100">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Bình luận {comments[p.id]?.length > 0 && `(${comments[p.id].length})`}</p>
-                    {comments[p.id]?.map(c => (<div key={c.id} className="flex gap-2 mb-2"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div><div className="flex-1 min-w-0"><p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>{c.content && <p className="text-xs text-gray-600">{renderMentions(c.content, mentionables)}</p>}{c.files && c.files.length > 0 && <div className="space-y-1 mt-1">{c.files.map((f, fi) => <a key={fi} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 group"><span className="text-sm">{getFileIcon(f.name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.name}</span><span className="text-[9px] text-gray-400">{formatFileSize(f.size)}</span></a>)}</div>}</div></div>))}
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">BÃ¬nh luáº­n {comments[p.id]?.length > 0 && `(${comments[p.id].length})`}</p>
+                    {comments[p.id]?.map(c => (<div key={c.id} className="flex gap-2 mb-2"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div><div className="flex-1 min-w-0"><p className="text-[10px]"><strong>{c.user?.name}</strong> Â· {timeAgo(c.created_at)}</p>{c.content && <p className="text-xs text-gray-600">{renderMentions(c.content, mentionables)}</p>}{c.files && c.files.length > 0 && <div className="space-y-1 mt-1">{c.files.map((f, fi) => <a key={fi} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 group"><span className="text-sm">{getFileIcon(f.name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.name}</span><span className="text-[9px] text-gray-400">{formatFileSize(f.size)}</span></a>)}</div>}</div></div>))}
                     <div className="space-y-1.5 mt-1.5">
                       <div className="flex gap-2">
                         <MentionInput
@@ -928,11 +928,11 @@ export default function Proposals({ userId, userName, members, department, branc
                           onMention={(uid) => setMentionedIds(prev => prev.includes(uid) ? prev : [...prev, uid])}
                           ini={ini}
                         />
-                        <label className="flex items-center px-2 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer text-gray-500" title="Đính kèm file">
+                        <label className="flex items-center px-2 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer text-gray-500" title="ÄÃ­nh kÃ¨m file">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                           <input type="file" multiple className="hidden" onChange={handleAddCommentFile} />
                         </label>
-                        <button onClick={() => addComment(p.id)} disabled={uploading} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2D5A3D' }}>{uploading ? '...' : 'Gửi'}</button>
+                        <button onClick={() => addComment(p.id)} disabled={uploading} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#123524' }}>{uploading ? '...' : 'Gá»­i'}</button>
                       </div>
                       {commentFiles.length > 0 && (
                         <div className="space-y-1">
@@ -959,7 +959,7 @@ export default function Proposals({ userId, userName, members, department, branc
             </div>
           ));
         })()}
-        {filteredProposals.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">Chưa có đề xuất nào trong mục này</div>}
+        {filteredProposals.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">ChÆ°a cÃ³ Ä‘á» xuáº¥t nÃ o trong má»¥c nÃ y</div>}
       </div>
     </div>
   );

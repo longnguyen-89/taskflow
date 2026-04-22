@@ -1,47 +1,100 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Outfit:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --gradient-brand: linear-gradient(135deg, #2D5A3D 0%, #4A7C5C 50%, #6B9E7A 100%);
+  /* Coco Pro v2 tokens */
+  --ink:      #123524;
+  --ink-2:    #1F3A2A;
+  --ink-3:    #3A4A3F;
+  --muted:    #8B7355;
+  --line:     #E8E2D5;
+  --line-2:   #F0EBE0;
+  --bg:       #F8F5EE;
+  --bg-soft:  #F3EFE4;
+  --card:     #FFFFFF;
+  --accent:      #2E6F4C;
+  --accent-soft: #E8F1EC;
+  --gold:      #D4A24C;
+  --gold-soft: #FAF1DC;
+  --gold-warm: #F5E7C3;
+  --danger:      #B5443A;
+  --danger-soft: #FAEAE7;
+  --warn:      #C8963E;
+  --warn-soft: #FAF1DC;
+  --violet:      #6B5B95;
+  --violet-soft: #F0EDF5;
+
+  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --gradient-brand: linear-gradient(135deg, #2E6F4C 0%, #1F3A2A 60%, #123524 100%);
+  --gradient-ink:   linear-gradient(135deg, #123524 0%, #1F3A2A 60%, #2E6F4C 100%);
 }
 
 body {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  background: #F8F7F4;
-  color: #1a1a1a;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11','ss01','ss02';
+  letter-spacing: -0.005em;
 }
+
+.font-mono { font-family: var(--font-mono); }
 
 @layer components {
   .card {
-    @apply bg-white rounded-2xl border border-gray-100 shadow-sm;
+    @apply bg-white rounded-xl2 border border-[color:var(--line)] shadow-card;
   }
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
   .btn-primary {
-    @apply px-5 py-2.5 bg-brand-600 text-white rounded-xl font-medium text-sm
-           hover:bg-brand-700 transition-all duration-200 active:scale-[0.98];
+    @apply px-5 py-2.5 text-white rounded-lg font-medium text-sm
+           transition-all duration-200 active:scale-[0.98];
+    background: var(--ink);
   }
+  .btn-primary:hover { background: var(--ink-2); }
   .btn-secondary {
-    @apply px-5 py-2.5 bg-white text-gray-700 rounded-xl font-medium text-sm border border-gray-200
-           hover:bg-gray-50 transition-all duration-200;
+    @apply px-5 py-2.5 bg-white rounded-lg font-medium text-sm border border-[color:var(--line)]
+           hover:bg-[color:var(--bg-soft)] transition-all duration-200;
+    color: var(--ink-2);
   }
+  .btn-accent {
+    @apply px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 active:scale-[0.98];
+    background: var(--accent);
+  }
+  .btn-accent:hover { background: var(--ink-2); }
   .input-field {
-    @apply w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm
-           focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500
+    @apply w-full px-3.5 py-2.5 bg-white border border-[color:var(--line)] rounded-lg text-sm
+           focus:outline-none focus:ring-2 focus:border-[color:var(--accent)]
            transition-all duration-200 placeholder:text-gray-400;
+    color: var(--ink);
   }
+  .input-field:focus { box-shadow: 0 0 0 3px rgba(46,111,76,.12); }
+  .eyebrow {
+    @apply text-[10px] font-mono uppercase tracking-[.08em];
+    color: var(--muted);
+  }
+  .pill {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium;
+  }
+  .pill-accent { background: var(--accent-soft); color: var(--accent); }
+  .pill-warn   { background: var(--warn-soft);   color: var(--warn); }
+  .pill-danger { background: var(--danger-soft); color: var(--danger); }
+  .pill-ok     { background: var(--accent-soft); color: var(--accent); }
+  .pill-ghost  { background: var(--bg-soft);     color: var(--muted); border: 1px solid var(--line); }
+  .pill-violet { background: var(--violet-soft); color: var(--violet); }
 }
 
 /* Custom scrollbar */
-::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+::-webkit-scrollbar-thumb { background: #d7d1c2; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* Animations */
 @keyframes slideUp {
@@ -52,13 +105,30 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.animate-slide-up {
-  animation: slideUp 0.4s ease-out forwards;
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
 }
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
-}
+.animate-slide-up    { animation: slideUp 0.4s ease-out forwards; }
+.animate-fade-in     { animation: fadeIn 0.3s ease-out forwards; }
+.animate-slide-right { animation: slideInRight 0.3s ease-out forwards; }
 
-/* Ẩn thanh scroll cho tab nav ngang trên mobile (vẫn scroll được) */
+/* No-scrollbar helper */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Helper utility classes mapped to CSS vars (so components can use them without Tailwind arbitrary values) */
+.bg-ink       { background: var(--ink); }
+.bg-ink-2     { background: var(--ink-2); }
+.bg-bone      { background: var(--bg); }
+.bg-bone-soft { background: var(--bg-soft); }
+.bg-accent    { background: var(--accent); }
+.bg-gold      { background: var(--gold); }
+.text-ink       { color: var(--ink); }
+.text-ink-2     { color: var(--ink-2); }
+.text-ink-3     { color: var(--ink-3); }
+.text-muted-ink { color: var(--muted); }
+.text-accent    { color: var(--accent); }
+.text-gold      { color: var(--gold); }
+.text-warm      { color: var(--gold-warm); }
+.border-line    { border-color: var(--line); }
