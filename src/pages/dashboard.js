@@ -845,11 +845,12 @@ export default function Dashboard() {
                       isAdmin={isAdmin}
                       isDirector={isDirector}
                       canPinTasks={isAdmin || isAccountant}
+                      canDeleteTask={canDeleteTask}
                       userId={user.id}
                       onRefresh={fetchData}
                       department={dept}
                       currentUserName={profile?.name}
-                      onOpenTask={(tid) => { changeViewMode('list'); setFocusTaskId(tid); }}
+                      currentUserRole={profile?.role}
                     />
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-3">

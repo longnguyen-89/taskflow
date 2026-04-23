@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
 import { logActivity, ACTIONS } from '@/lib/activityLog';
+import TaskDetailModal from '@/components/TaskDetailModal';
 
 // Feature 7 — Kanban Board view (Coco Pro v2)
 // 4 cột: Chưa làm / Đang làm / Chờ phản hồi / Hoàn thành
@@ -23,12 +24,15 @@ const toneVar = (tone) => ({
   danger: 'var(--danger)',
 }[tone] || 'var(--muted)');
 
-export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPinTasks, userId, onRefresh, department, currentUserName, onOpenTask }) {
+export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPinTasks, canDeleteTask, userId, onRefresh, department, currentUserName, currentUserRole, onOpenTask }) {
   const [dragTaskId, setDragTaskId] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [overdueModal, setOverdueModal] = useState(null);
   const [overdueReason, setOverdueReason] = useState('');
   const [overdueNote, setOverdueNote] = useState('');
+  // Task detail modal — mở khi click card (thay cho navigate sang list view)
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const selectedTask = selectedTaskId ? (tasks || []).find(t => t.id === selectedTaskId) : null;
 
   const parentTasks = tasks.filter(t => !t.parent_id && t.approval_status !== 'pending');
 
@@ -191,7 +195,7 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
                       draggable
                       onDragStart={e => onDragStart(e, t.id)}
                       onDragEnd={onDragEnd}
-                      onClick={() => onOpenTask && onOpenTask(t.id)}
+                      onClick={() => setSelectedTaskId(t.id)}
                       className="card p-3 cursor-grab hover:shadow-card-hover transition-all"
                       style={{
                         borderLeft: t.pinned ? '3px solid var(--gold)' : undefined,
@@ -318,6 +322,23 @@ export default function KanbanBoard({ tasks, members, isAdmin, isDirector, canPi
       <div className="text-center text-[10px] italic pt-1 font-mono" style={{ color: 'var(--muted)' }}>
         Kéo-thả task giữa các cột để đổi trạng thái · Click task để mở chi tiết
       </div>
+
+      {/* Task detail modal — click card → open modal với mô tả + file + comment @mention */}
+      <TaskDetailModal
+        task={selectedTask}
+        open={!!selectedTask}
+        onClose={() => setSelectedTaskId(null)}
+        members={members}
+        userId={userId}
+        currentUserRole={currentUserRole}
+        currentUserName={currentUserName}
+        department={department}
+        isAdmin={isAdmin}
+        isDirector={isDirector}
+        canPinTasks={canPinTasks}
+        canDeleteTask={canDeleteTask}
+        onRefresh={onRefresh}
+      />
 
       {/* Overdue reason modal */}
       {overdueModal && (
