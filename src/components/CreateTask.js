@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/components/Toaster';
 import { sendPush } from '@/lib/notify';
-import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
 import { logActivity, ACTIONS } from '@/lib/activityLog';
 
 function getFileIcon(name) {
@@ -33,21 +32,8 @@ export default function CreateTask({ members, userId, userName, department, bran
   const [files, setFiles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const branchOptions = (department === 'nail')
-    ? (canViewAll ? NAIL_BRANCHES.map(b => b.id) : (Array.isArray(allowedBranches) ? allowedBranches : []))
-    : [];
-  const [taskBranch, setTaskBranch] = useState(branch || (branchOptions.length === 1 ? branchOptions[0] : ''));
-  useEffect(() => {
-    setTaskBranch(branch || (branchOptions.length === 1 ? branchOptions[0] : ''));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branch, department]);
-
-  const filteredMembers = (department === 'nail' && taskBranch)
-    ? members.filter(m =>
-        m.role === 'director' || m.role === 'accountant' ||
-        (Array.isArray(m.branches) && m.branches.includes(taskBranch))
-      )
-    : members;
+  // Hiển thị toàn bộ nhân sự; chi nhánh sẽ tự lấy từ hồ sơ từng người khi tạo task.
+  const filteredMembers = members;
 
   function toggleAssignee(id) { setAssignees(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
   function toggleWatcher(id) { setWatchers(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
@@ -63,7 +49,6 @@ export default function CreateTask({ members, userId, userName, department, bran
     e.preventDefault();
     if (!title.trim()) return toast('Nhập tiêu đề', 'error');
     if (assignees.length === 0) return toast('Chọn người thực hiện', 'error');
-    if (department === 'nail' && branchOptions.length > 0 && !taskBranch) return toast('Chọn chi nhánh cho task', 'error');
     setSubmitting(true);
 
     const groupKey = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -89,12 +74,24 @@ export default function CreateTask({ members, userId, userName, department, bran
     let createdCount = 0;
 
     for (const uid of assignees) {
+      // Mỗi assignee tạo 1 task riêng; branch tự lấy từ chi nhánh của người đó.
+      // Nếu user thuộc nhiều chi nhánh thì dùng chi nhánh đầu tiên; TGĐ/Kế toán thì để null.
+      const assignee = members.find(m => m.id === uid);
+      const assigneeBranch = (department === 'nail'
+        && assignee
+        && assignee.role !== 'director'
+        && assignee.role !== 'accountant'
+        && Array.isArray(assignee.branches)
+        && assignee.branches.length > 0)
+        ? assignee.branches[0]
+        : null;
+
       const { data: task, error } = await supabase.from('tasks').insert({
         title: title.trim(),
         description: desc.trim(),
         priority,
         department,
-        branch: department === 'nail' ? (taskBranch || null) : null,
+        branch: assigneeBranch,
         group_id: groupId || null,
         group_key: groupKey,
         deadline: deadlineISO,
@@ -141,7 +138,7 @@ export default function CreateTask({ members, userId, userName, department, bran
       return;
     }
 
-    logActivity({ userId, userName, action: ACTIONS.TASK_CREATED, targetType: 'task', targetTitle: title.trim(), details: { assignee_count: createdCount, priority }, department, branch: department === 'nail' ? (taskBranch || null) : null });
+    logActivity({ userId, userName, action: ACTIONS.TASK_CREATED, targetType: 'task', targetTitle: title.trim(), details: { assignee_count: createdCount, priority }, department });
     toast(`Đã tạo ${createdCount} task cho ${createdCount} người!`, 'success');
     setTitle(''); setDesc(''); setPriority('medium'); setDeadline(''); setAssignees([]); setWatchers([]); setGroupId(''); setFiles([]);
     setSubmitting(false); onCreated();
@@ -158,41 +155,6 @@ export default function CreateTask({ members, userId, userName, department, bran
       </div>
 
       <form onSubmit={handleSubmit} className="card p-6 space-y-5">
-        {/* Branch */}
-        {department === 'nail' && branchOptions.length > 0 && (
-          <div>
-            <label className="block text-xs font-medium text-ink-2 mb-1.5">Chi nhánh <span style={{ color: 'var(--danger)' }}>*</span></label>
-            {branchOptions.length === 1 ? (
-              <div className="pill pill-accent px-3 py-1.5 text-xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                {branchLabel(branchOptions[0])}
-              </div>
-            ) : (
-              <div className="flex gap-1.5 flex-wrap">
-                {branchOptions.map(bid => (
-                  <button
-                    key={bid}
-                    type="button"
-                    onClick={() => { setTaskBranch(bid); setAssignees([]); setWatchers([]); }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                    style={{
-                      border: `1px solid ${taskBranch === bid ? 'var(--accent)' : 'var(--line)'}`,
-                      background: taskBranch === bid ? 'var(--accent-soft)' : '#fff',
-                      color: taskBranch === bid ? 'var(--accent)' : 'var(--muted)',
-                      fontWeight: taskBranch === bid ? 600 : 400,
-                    }}
-                  >
-                    {branchLabel(bid)}
-                  </button>
-                ))}
-              </div>
-            )}
-            <p className="text-[10px] font-mono text-muted-ink mt-1">
-              Chỉ nhân sự thuộc chi nhánh này (+ TGĐ/Kế toán) sẽ hiển thị ở danh sách giao.
-            </p>
-          </div>
-        )}
-
         {/* Group */}
         {taskGroups.length > 0 && (
           <div>
