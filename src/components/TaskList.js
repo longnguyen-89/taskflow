@@ -229,6 +229,44 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
   }
   function removeCommentFile(tid, index) { setDraftField(tid, 'files', getDraft(tid).files.filter((_, i) => i !== index)); }
 
+  // Feature: upload thêm file (hình ảnh/tài liệu) vào task đã tạo.
+  // Luu vao bang task_files — hien thi ra FileList ngay sau khi onRefresh.
+  const [uploadingTaskId, setUploadingTaskId] = useState(null);
+  async function addTaskFiles(taskId, e) {
+    const selected = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (selected.length === 0) return;
+    setUploadingTaskId(taskId);
+    let okCount = 0;
+    for (const f of selected) {
+      const safeName = f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+      const path = 'tasks/' + taskId + '/' + Date.now() + '_' + safeName;
+      const { error: upErr } = await supabase.storage.from('attachments').upload(path, f);
+      if (upErr) { toast('Lỗi upload ' + f.name + ': ' + upErr.message, 'error'); continue; }
+      const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(path);
+      const { error: insErr } = await supabase.from('task_files').insert({
+        task_id: taskId, file_name: f.name, file_url: publicUrl,
+        file_type: f.type, file_size: f.size, uploaded_by: userId,
+      });
+      if (insErr) { toast('Lỗi lưu ' + f.name + ': ' + insErr.message, 'error'); continue; }
+      okCount++;
+    }
+    setUploadingTaskId(null);
+    if (okCount > 0) {
+      toast('Đã đính kèm ' + okCount + ' file', 'success');
+      onRefresh && onRefresh();
+    }
+  }
+
+  async function removeTaskFile(fileId, taskId) {
+    const ok = typeof window !== 'undefined' && window.confirm('Gỡ file này khỏi task?');
+    if (!ok) return;
+    const { error } = await supabase.from('task_files').delete().eq('id', fileId);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    toast('Đã gỡ file', 'success');
+    onRefresh && onRefresh();
+  }
+
   async function updateStatus(tid, s) {
     const task = tasks.find(t => t.id === tid);
     // Nếu task đang quá hạn và user định chuyển sang done/waiting → yêu cầu chọn lý do (nếu chưa có)
@@ -437,7 +475,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
                 </div>
                 <span className="text-[11px] font-bold font-mono w-9 text-right" style={{ color: pct >= 80 ? 'var(--accent)' : pct >= 50 ? 'var(--warn)' : 'var(--danger)' }}>{pct}%</span>
               </div>
-              <div className="space-y-1.5">{g.tasks.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div>
+              <div className="space-y-1.5">{g.tasks.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} addTaskFiles={addTaskFiles} removeTaskFile={removeTaskFile} uploadingTaskId={uploadingTaskId} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div>
             </div>
           );
         })}
@@ -451,35 +489,51 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
   return (
     <div className="space-y-4">
       {overdueModalEl}
-      {todo.length > 0 &&<div><div className="flex items-baseline gap-2 mb-2"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} /><span className="text-sm font-semibold text-ink" style={{ letterSpacing: '-.005em' }}>Cần làm</span><span className="text-[11px] font-mono text-muted-ink">{todo.length} task</span></div><div className="space-y-1.5">{todo.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
-      {done.length > 0 && <div className="mt-4"><div className="flex items-baseline gap-2 mb-2"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--muted)' }} /><span className="text-sm font-semibold text-ink" style={{ letterSpacing: '-.005em' }}>Đã xong</span><span className="text-[11px] font-mono text-muted-ink">{done.length} task</span></div><div className="space-y-1.5 opacity-50">{done.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
+      {todo.length > 0 &&<div><div className="flex items-baseline gap-2 mb-2"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} /><span className="text-sm font-semibold text-ink" style={{ letterSpacing: '-.005em' }}>Cần làm</span><span className="text-[11px] font-mono text-muted-ink">{todo.length} task</span></div><div className="space-y-1.5">{todo.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} addTaskFiles={addTaskFiles} removeTaskFile={removeTaskFile} uploadingTaskId={uploadingTaskId} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
+      {done.length > 0 && <div className="mt-4"><div className="flex items-baseline gap-2 mb-2"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--muted)' }} /><span className="text-sm font-semibold text-ink" style={{ letterSpacing: '-.005em' }}>Đã xong</span><span className="text-[11px] font-mono text-muted-ink">{done.length} task</span></div><div className="space-y-1.5 opacity-50">{done.map(t => <Row key={t.id} t={t} exp={expanded === t.id} toggle={() => toggle(t.id)} upd={updateStatus} ini={ini} fmtDT={fmtDT} fmtDate={fmtDate} timeAgo={timeAgo} isOverdue={isOverdue} comments={comments[t.id]} getDraft={getDraft} setDraftField={setDraftField} addC={addComment} uid={userId} handleAddCommentFile={handleAddCommentFile} removeCommentFile={removeCommentFile} uploading={uploading} addTaskFiles={addTaskFiles} removeTaskFile={removeTaskFile} uploadingTaskId={uploadingTaskId} subTasks={subTasks[t.id]} showSubForm={showSubForm} setShowSubForm={setShowSubForm} subTitle={subTitle} setSubTitle={setSubTitle} subDeadline={subDeadline} setSubDeadline={setSubDeadline} subFiles={subFiles} handleAddSubFile={handleAddSubFile} removeSubFile={removeSubFile} createSubTask={createSubTask} subCreating={subCreating} expandedSub={expandedSub} setExpandedSub={setExpandedSub} updateSubStatus={updateSubStatus} isAdmin={isAdmin} isDirector={isDirector} canDeleteTask={canDeleteTask} delTask={deleteTask} togglePin={togglePin} canPinTasks={canPinTasks} mentionables={mentionables} assignMentionedUser={assignMentionedUser} members={members} toggleReaction={toggleReaction} checklist={checklist[t.id]} newChkText={newChkText[t.id] || ''} setNewChkText={(v) => setNewChkText(p => ({ ...p, [t.id]: v }))} addChecklistItem={addChecklistItem} toggleChecklistItem={toggleChecklistItem} removeChecklistItem={removeChecklistItem} />)}</div></div>}
       {parentTasks.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">Chưa có task</div>}
     </div>
   );
 }
 
-function FileList({ files }) {
+function FileList({ files, onRemove, taskId }) {
   if (!files || files.length === 0) return null;
   return (
     <div className="space-y-1 my-1.5">
       {files.map((f, i) => {
         const icon = getFileIcon(f.file_name || f.name);
+        const fileId = f.id;
         return (
-          <a key={f.id || i} href={f.file_url || f.url} target="_blank" rel="noreferrer"
+          <div key={fileId || i}
             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg transition-colors group"
             style={{ background: 'var(--bg-soft)', border: '1px solid var(--line-2)' }}>
             <span className="text-sm flex-shrink-0">{icon}</span>
-            <span className="text-xs truncate flex-1 transition-colors" style={{ color: 'var(--ink-2)' }}>{f.file_name || f.name}</span>
-            {(f.file_size || f.size) > 0 && <span className="text-[10px] font-mono flex-shrink-0" style={{ color: 'var(--muted)' }}>{formatFileSize(f.file_size || f.size)}</span>}
-            <svg className="w-3 h-3 flex-shrink-0 transition-colors" style={{ color: 'var(--muted)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-          </a>
+            <a href={f.file_url || f.url} target="_blank" rel="noreferrer"
+              className="flex-1 min-w-0 flex items-center gap-2 truncate">
+              <span className="text-xs truncate flex-1 transition-colors" style={{ color: 'var(--ink-2)' }}>{f.file_name || f.name}</span>
+              {(f.file_size || f.size) > 0 && <span className="text-[10px] font-mono flex-shrink-0" style={{ color: 'var(--muted)' }}>{formatFileSize(f.file_size || f.size)}</span>}
+              <svg className="w-3 h-3 flex-shrink-0 transition-colors" style={{ color: 'var(--muted)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            </a>
+            {onRemove && fileId && (
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(fileId, taskId); }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-0.5 rounded hover:bg-white"
+                style={{ color: 'var(--danger)' }}
+                title="Gỡ file"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
         );
       })}
     </div>
   );
 }
 
-function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, comments, getDraft, setDraftField, addC, uid, handleAddCommentFile, removeCommentFile, uploading, subTasks, showSubForm, setShowSubForm, subTitle, setSubTitle, subDeadline, setSubDeadline, subFiles, handleAddSubFile, removeSubFile, createSubTask, subCreating, expandedSub, setExpandedSub, updateSubStatus, isAdmin, isDirector, canDeleteTask, delTask, togglePin, canPinTasks, mentionables, assignMentionedUser, members, toggleReaction, checklist, newChkText, setNewChkText, addChecklistItem, toggleChecklistItem, removeChecklistItem }) {
+function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, comments, getDraft, setDraftField, addC, uid, handleAddCommentFile, removeCommentFile, uploading, addTaskFiles, removeTaskFile, uploadingTaskId, subTasks, showSubForm, setShowSubForm, subTitle, setSubTitle, subDeadline, setSubDeadline, subFiles, handleAddSubFile, removeSubFile, createSubTask, subCreating, expandedSub, setExpandedSub, updateSubStatus, isAdmin, isDirector, canDeleteTask, delTask, togglePin, canPinTasks, mentionables, assignMentionedUser, members, toggleReaction, checklist, newChkText, setNewChkText, addChecklistItem, toggleChecklistItem, removeChecklistItem }) {
   const st = ST[t.status] || ST.todo;
   const pr = PR[t.priority] || PR.medium;
   const od = isOverdue(t.deadline, t.status);
@@ -552,12 +606,39 @@ function Row({ t, exp, toggle, upd, ini, fmtDT, fmtDate, timeAgo, isOverdue, com
               {t.overdue_reason_note && <p className="mt-0.5 italic" style={{ color: 'var(--danger)', opacity: 0.8 }}>"{t.overdue_reason_note}"</p>}
             </div>
           )}
-          {t.files?.length > 0 && (
-            <div className="mb-2.5">
-              <p className="eyebrow mb-1">Đính kèm · {t.files.length}</p>
-              <FileList files={t.files} />
-            </div>
-          )}
+          <div className="mb-2.5">
+            <p className="eyebrow mb-1">
+              Đính kèm
+              {t.files?.length > 0 && <span style={{ color: 'var(--accent)' }}> · {t.files.length}</span>}
+            </p>
+            {t.files?.length > 0 && <FileList files={t.files} onRemove={removeTaskFile} taskId={t.id} />}
+            {addTaskFiles && (
+              <label
+                className="flex items-center justify-center gap-1.5 mt-1 px-3 py-2 rounded-lg cursor-pointer text-xs font-medium transition-all hover:shadow-sm"
+                style={{
+                  border: '1px dashed var(--accent)',
+                  color: 'var(--accent)',
+                  background: 'var(--accent-soft)',
+                  opacity: uploadingTaskId === t.id ? 0.6 : 1,
+                  pointerEvents: uploadingTaskId === t.id ? 'none' : 'auto',
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                {uploadingTaskId === t.id ? (
+                  <span className="font-mono">Đang tải lên…</span>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Thêm hình ảnh/tài liệu</span>
+                  </>
+                )}
+                <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.zip,.rar"
+                  className="hidden" onChange={(e) => addTaskFiles(t.id, e)} disabled={uploadingTaskId === t.id} />
+              </label>
+            )}
+          </div>
           {t.status !== 'done' && (
             <div className="flex gap-1.5 mb-3 flex-wrap">
               {['todo', 'doing', 'waiting', 'done'].filter(s => s !== t.status).map(s => (
