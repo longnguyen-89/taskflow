@@ -210,9 +210,21 @@ export default function Dashboard() {
     const { data: groups } = await supabase.from('task_groups').select('*').eq('department', dept).order('name');
     setTaskGroups(groups || []);
 
-    const { data: notifs } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50);
-    setNotifications(notifs || []);
-    setUnreadCount(notifs?.filter(n => !n.read).length || 0);
+    const { data: notifs } = await supabase.from('notifications')
+      .select('*, task:tasks(department, branch), proposal:proposals(department, branch)')
+      .eq('user_id', user.id).order('created_at', { ascending: false }).limit(100);
+    // Filter theo dept + branch: nếu notif có task/proposal gắn thì phải match dept (và branch nếu đang chọn);
+    // nếu không có task/proposal (như ceo_report, info system) → luôn hiện.
+    const filteredNotifs = (notifs || []).filter(n => {
+      const itemDept = n.task?.department || n.proposal?.department;
+      const itemBranch = n.task?.branch || n.proposal?.branch;
+      if (!itemDept) return true;
+      if (itemDept !== dept) return false;
+      if (dept === 'nail' && branch && itemBranch && itemBranch !== branch) return false;
+      return true;
+    });
+    setNotifications(filteredNotifs);
+    setUnreadCount(filteredNotifs.filter(n => !n.read).length);
 
     // Pending proposals count (cho KPI Dashboard)
     try {
@@ -526,26 +538,6 @@ export default function Dashboard() {
         })}
       </div>
 
-      {/* Dept switcher (canViewAll only) */}
-      {canViewAll && (
-        <div className="px-2 py-2 mb-2 rounded-md" style={{ background: 'rgba(212,162,76,.08)' }}>
-          <div className="text-[10px] font-mono uppercase tracking-wider mb-1.5" style={{ color: 'rgba(232,211,162,.5)' }}>Bộ phận</div>
-          <div className="flex gap-1 p-0.5 rounded-md" style={{ background: 'rgba(18,53,36,.5)' }}>
-            {[{ id: 'nail', l: 'Nail' }, { id: 'hotel', l: 'Hotel' }].map(d => (
-              <button
-                key={d.id}
-                onClick={() => { setDept(d.id); setBranch(null); }}
-                className="flex-1 px-2 py-1 rounded text-[11px] font-semibold transition-all"
-                style={{
-                  background: dept === d.id ? 'rgba(212,162,76,.2)' : 'transparent',
-                  color: dept === d.id ? '#F5E7C3' : 'rgba(232,211,162,.6)',
-                }}
-              >{d.l}</button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Workspace switcher */}
       <div className="mt-auto pt-2.5 flex items-center gap-2.5 px-2.5" style={{ borderTop: '1px solid rgba(232,211,162,.12)' }}>
         <div className="w-[26px] h-[26px] rounded-md flex items-center justify-center font-bold text-[11px] flex-shrink-0" style={{
@@ -621,6 +613,25 @@ export default function Dashboard() {
                 {currentTitle}
               </span>
             </div>
+
+            {/* Dept switcher (canViewAll only) — Nail / Hotel */}
+            {canViewAll && (
+              <div className="flex gap-0.5 p-0.5 rounded-lg flex-shrink-0" style={{ background: 'var(--bg-soft)', border: '1px solid var(--line)' }}>
+                {[{ id: 'nail', l: 'Nail' }, { id: 'hotel', l: 'Hotel' }].map(d => (
+                  <button
+                    key={d.id}
+                    onClick={() => { setDept(d.id); setBranch(null); }}
+                    className="px-3 py-1 rounded-md text-xs font-semibold transition-all"
+                    style={{
+                      background: dept === d.id ? '#fff' : 'transparent',
+                      color: dept === d.id ? 'var(--ink)' : 'var(--muted-ink)',
+                      boxShadow: dept === d.id ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+                      minWidth: 56,
+                    }}
+                  >{d.l}</button>
+                ))}
+              </div>
+            )}
 
             {/* Spacer */}
             <div className="flex-1" />

@@ -215,6 +215,7 @@ function isToday(d) {
 }
 
 export default function Notifications({ notifications, userId, onRefresh, onOpen }) {
+  const [showAll, setShowAll] = useState(false);
   async function markAll() {
     await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
     toast('Đã đánh dấu tất cả là đã đọc', 'success');
@@ -225,6 +226,7 @@ export default function Notifications({ notifications, userId, onRefresh, onOpen
     onRefresh();
   }
   const unread = notifications.filter(n => !n.read);
+  const visibleList = showAll ? notifications : unread;
 
   async function handleClick(n) {
     if (!n.read) await markOne(n.id);
@@ -232,8 +234,8 @@ export default function Notifications({ notifications, userId, onRefresh, onOpen
   }
 
   // Group: today vs earlier
-  const today = notifications.filter(n => isToday(n.created_at));
-  const earlier = notifications.filter(n => !isToday(n.created_at));
+  const today = visibleList.filter(n => isToday(n.created_at));
+  const earlier = visibleList.filter(n => !isToday(n.created_at));
 
   const renderNotif = (n) => {
     if (n.type === 'ceo_report' && n.data) {
@@ -282,7 +284,7 @@ export default function Notifications({ notifications, userId, onRefresh, onOpen
 
   return (
     <div className="animate-fade-in max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-5 gap-2 flex-wrap">
         <div>
           <h2 className="text-[22px] font-semibold text-ink" style={{ letterSpacing: '-.015em' }}>Thông báo</h2>
           <p className="text-sm text-ink-3 mt-0.5">
@@ -293,17 +295,33 @@ export default function Notifications({ notifications, userId, onRefresh, onOpen
             )}
           </p>
         </div>
-        {unread.length > 0 && (
-          <button onClick={markAll} className="btn-secondary text-xs">
-            Đánh dấu tất cả đã đọc
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAll(v => !v)}
+            className="btn-secondary text-xs"
+            title={showAll ? 'Chỉ hiện thông báo chưa đọc' : 'Hiện tất cả (gồm đã đọc)'}
+          >
+            {showAll ? 'Chỉ chưa đọc' : 'Hiện tất cả'}
           </button>
-        )}
+          {unread.length > 0 && (
+            <button onClick={markAll} className="btn-secondary text-xs">
+              Đánh dấu tất cả đã đọc
+            </button>
+          )}
+        </div>
       </div>
 
-      {notifications.length === 0 ? (
+      {visibleList.length === 0 ? (
         <div className="card p-12 text-center">
           <div className="text-3xl mb-2">🔔</div>
-          <div className="text-sm text-ink-3">Chưa có thông báo</div>
+          <div className="text-sm text-ink-3">
+            {showAll || notifications.length === 0 ? 'Chưa có thông báo' : 'Không có thông báo chưa đọc'}
+          </div>
+          {!showAll && notifications.length > 0 && (
+            <button onClick={() => setShowAll(true)} className="mt-3 text-xs font-medium" style={{ color: 'var(--accent)' }}>
+              Xem {notifications.length} thông báo đã đọc
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
