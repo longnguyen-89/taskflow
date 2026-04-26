@@ -14,6 +14,8 @@ import AdminPanel from '@/components/AdminPanel';
 import RecurringTasks from '@/components/RecurringTasks';
 import SearchModal from '@/components/SearchModal';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import TaskDetailModal from '@/components/TaskDetailModal';
+import { toast } from '@/components/Toaster';
 import { NAIL_BRANCHES, branchLabel, loadBranches } from '@/lib/branches';
 
 export default function Dashboard() {
@@ -41,6 +43,8 @@ export default function Dashboard() {
   const [appearance, setAppearance] = useState({ primaryColor: '#123524', bgUrl: '', bannerText: '', bannerColor: '#123524', bannerEnabled: false });
   const [focusTaskId, setFocusTaskId] = useState(null);
   const [focusProposalId, setFocusProposalId] = useState(null);
+  const [detailTask, setDetailTask] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [viewMode, setViewMode] = useState('list');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -68,6 +72,42 @@ export default function Dashboard() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Mở thẳng modal chi tiết task — dùng cho click notification, click focus list, etc.
+  // Fetch full task data (creator, assignees, watchers, files) để TaskDetailModal render đầy đủ.
+  const openTaskDetail = useCallback(async (taskId) => {
+    if (!taskId) return;
+    setDetailLoading(true);
+    try {
+      // Fetch task; nếu là sub-task thì mở task cha (parent_id) để thấy đủ context.
+      const { data: tk } = await supabase.from('tasks')
+        .select('id, parent_id, department, branch')
+        .eq('id', taskId).maybeSingle();
+      const targetId = tk?.parent_id || tk?.id || taskId;
+      const { data: full } = await supabase.from('tasks').select(`
+        *, creator:profiles!tasks_created_by_fkey(id, name, avatar_color, position),
+        assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(id, name, avatar_color, position)),
+        watchers:task_watchers(user_id, user:profiles!task_watchers_user_id_fkey(id, name, avatar_color)),
+        files:task_files(*)
+      `).eq('id', targetId).maybeSingle();
+      if (full) {
+        // Switch dept/branch context để TaskDetailModal có đúng members + permissions.
+        if (full.department && full.department !== dept) setDept(full.department);
+        if (full.department === 'nail') {
+          const allowed = (isDirector || isAccountant) ? null : (Array.isArray(profile?.branches) ? profile.branches : []);
+          if (full.branch && (!allowed || allowed.includes(full.branch))) setBranch(full.branch);
+        }
+        setDetailTask(full);
+      } else {
+        toast('Không tìm thấy task (có thể đã bị xoá)', 'error');
+      }
+    } catch (e) {
+      toast('Lỗi mở chi tiết task', 'error');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [dept, isDirector, isAccountant, profile]);
+
+  // Legacy: chỉ dùng cho focus-from-list (set focusTaskId, không mở modal). Giữ cho code path khác.
   const openTaskById = useCallback(async (taskId) => {
     if (!taskId) return;
     const { data: tk } = await supabase.from('tasks').select('id, department, branch, parent_id').eq('id', taskId).maybeSingle();
@@ -91,7 +131,8 @@ export default function Dashboard() {
   const handleOpenNotification = useCallback(async (n) => {
     if (!n) return;
     if (n.task_id) {
-      await openTaskById(n.task_id);
+      // Click notification có task → mở thẳng modal chi tiết (không cần navigate tab)
+      await openTaskDetail(n.task_id);
     } else if (n.proposal_id) {
       const { data: pr } = await supabase.from('proposals').select('id, department, branch').eq('id', n.proposal_id).maybeSingle();
       if (pr) {
@@ -111,7 +152,7 @@ export default function Dashboard() {
         setTab('proposals');
       }
     }
-  }, [dept, isDirector, isAccountant, profile, openTaskById]);
+  }, [dept, isDirector, isAccountant, profile, openTaskDetail]);
 
   useEffect(() => {
     supabase.from('app_settings').select('value').eq('key', 'appearance').single().then(({ data }) => {
@@ -920,7 +961,7 @@ export default function Dashboard() {
                             return (
                               <button
                                 key={task.id}
-                                onClick={() => { changeViewMode('kanban'); setFocusTaskId(task.id); }}
+                                onClick={() => openTaskDetail(task.id)}
                                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-bone-soft transition-colors text-left"
                                 style={{
                                   borderBottom: i === focusTasks.length - 1 ? 'none' : '1px solid var(--line-2, var(--line))',
@@ -1054,6 +1095,28 @@ export default function Dashboard() {
       </div>
 
       {showSearch && <SearchModal tasks={tasks} onClose={() => setShowSearch(false)} onSelect={() => { setShowSearch(false); setTab('dashboard'); }} />}
+
+      {/* Task detail modal — mở từ click notification, focus list, etc. */}
+      <TaskDetailModal
+        task={detailTask}
+        open={!!detailTask}
+        onClose={() => setDetailTask(null)}
+        members={members}
+        userId={user?.id}
+        currentUserRole={profile?.role}
+        currentUserName={profile?.name}
+        department={detailTask?.department || dept}
+        isAdmin={isAdmin}
+        isDirector={isDirector}
+        canPinTasks={isAdmin || isAccountant}
+        canDeleteTask={canDeleteTask}
+        onRefresh={fetchData}
+      />
+      {detailLoading && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 pointer-events-none">
+          <div className="bg-white rounded-lg px-4 py-3 shadow-pop text-xs text-ink-3 animate-pulse">Đang mở chi tiết…</div>
+        </div>
+      )}
 
       {/* Password change modal */}
       {showPwModal && (
