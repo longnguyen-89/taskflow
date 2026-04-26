@@ -191,7 +191,24 @@ export default function Proposals({ userId, userName, members, department, branc
   const deptMembers = members.filter(m => m.department === department || m.role === 'director' || m.role === 'accountant');
   const approvers = deptMembers.filter(m => m.id !== userId && (m.role === 'director' || m.role === 'accountant'));
   const watcherOptions = deptMembers.filter(m => m.id !== userId && !approverIds.includes(m.id));
-  // Người có thể được @mention trong bình luận đề xuất: cùng phòng ban + TGĐ/Kế toán, loại bỏ chính mình.
+  // Mentionables PER-PROPOSAL — lọc theo dept + branch của từng đề xuất.
+  // - TGĐ + Kế toán: luôn cho mention (cross-dept).
+  // - Còn lại: cùng dept; nếu đề xuất có chi nhánh (Nail), member phải thuộc chi nhánh đó.
+  const mentionablesFor = (p) => {
+    const pBranch = p?.branch || null;
+    return (members || []).filter(m => {
+      if (m.id === userId) return false;
+      if (m.role === 'director' || m.role === 'accountant') return true;
+      if (m.department !== department) return false;
+      if (department === 'nail' && pBranch) {
+        const mb = Array.isArray(m.branches) ? m.branches : [];
+        if (mb.length === 0) return false;
+        if (!mb.includes(pBranch)) return false;
+      }
+      return true;
+    });
+  };
+  // Fallback list khi cần global (chưa có proposal context) — chỉ dùng cho renderMentions hiển thị tên cũ.
   const mentionables = deptMembers.filter(m => m.id !== userId);
 
   useEffect(() => { fetchAll(); }, [department, dateFrom, dateTo]);
@@ -981,7 +998,7 @@ export default function Proposals({ userId, userName, members, department, branc
                           value={isExp ? newComment : ''}
                           setValue={setNewComment}
                           onSend={() => addComment(p.id)}
-                          mentionables={mentionables}
+                          mentionables={mentionablesFor(p)}
                           onMention={(uid) => setMentionedIds(prev => prev.includes(uid) ? prev : [...prev, uid])}
                           ini={ini}
                         />

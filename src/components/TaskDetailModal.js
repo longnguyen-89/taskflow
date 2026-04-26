@@ -63,10 +63,22 @@ export default function TaskDetailModal({
   const [uploading, setUploading] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
-  const isCEOorAcc = currentUserRole === 'director' || currentUserRole === 'accountant';
-  const mentionables = (members || []).filter(m =>
-    m.id !== userId && (isCEOorAcc || m.department === department || m.role === 'director' || m.role === 'accountant')
-  );
+  // Mentionables: lọc theo dept + branch của task hiện tại.
+  // - TGĐ + Kế toán: luôn mention được (cross-dept management).
+  // - Còn lại: phải cùng dept với task; nếu task có chi nhánh (Nail), member phải thuộc chi nhánh đó.
+  const taskBranch = task?.branch || null;
+  const taskDept = task?.department || department;
+  const mentionables = (members || []).filter(m => {
+    if (m.id === userId) return false;
+    if (m.role === 'director' || m.role === 'accountant') return true;
+    if (m.department !== taskDept) return false;
+    if (taskDept === 'nail' && taskBranch) {
+      const mb = Array.isArray(m.branches) ? m.branches : [];
+      if (mb.length === 0) return false;
+      if (!mb.includes(taskBranch)) return false;
+    }
+    return true;
+  });
 
   // Load comments khi modal mở
   useEffect(() => {
