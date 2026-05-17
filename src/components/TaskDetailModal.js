@@ -63,6 +63,18 @@ export default function TaskDetailModal({
   const [uploading, setUploading] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
+  // Edit mode state — su dung cho phan sua noi dung task (title/desc/priority/deadline).
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editPriority, setEditPriority] = useState('medium');
+  const [editDeadline, setEditDeadline] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // UI state cho picker them assignee / watcher.
+  const [showAddAssignee, setShowAddAssignee] = useState(false);
+  const [showAddWatcher, setShowAddWatcher] = useState(false);
+
   // Mentionables: lọc theo dept + branch của task hiện tại.
   // - TGĐ + Kế toán: luôn mention được (cross-dept management).
   // - Còn lại: phải cùng dept với task; nếu task có chi nhánh (Nail), member phải thuộc chi nhánh đó.
@@ -84,6 +96,22 @@ export default function TaskDetailModal({
   useEffect(() => {
     if (!task || !open) return;
     setDraft({ text: '', files: [], mentionedIds: [] });
+    // Reset edit state moi khi mo task khac.
+    setEditing(false);
+    setShowAddAssignee(false);
+    setShowAddWatcher(false);
+    setEditTitle(task.title || '');
+    setEditDesc(task.description || '');
+    setEditPriority(task.priority || 'medium');
+    // datetime-local can format 'YYYY-MM-DDTHH:mm' theo gio local.
+    if (task.deadline) {
+      const d = new Date(task.deadline);
+      const pad = n => String(n).padStart(2, '0');
+      const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      setEditDeadline(local);
+    } else {
+      setEditDeadline('');
+    }
     loadComments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task?.id, open]);
@@ -231,12 +259,159 @@ export default function TaskDetailModal({
     onRefresh && onRefresh();
   }
 
+  // Luu thay doi noi dung task (title/description/priority/deadline).
+  // Khong dong cham assignees/watchers — phan do co handler rieng.
+  async function saveTaskEdit() {
+    const newTitle = (editTitle || '').trim();
+    if (!newTitle) { toast('Tiêu đề không được để trống', 'error'); return; }
+    setSavingEdit(true);
+    const updates = {
+      title: newTitle,
+      description: (editDesc || '').trim(),
+      priority: editPriority || 'medium',
+      deadline: editDeadline ? new Date(editDeadline).toISOString() : null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('tasks').update(updates).eq('id', task.id);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); setSavingEdit(false); return; }
+
+    // Ghi log thay doi de truy vet (chi log field thuc su doi).
+    const changed = {};
+    if (task.title !== updates.title) changed.title = { from: task.title, to: updates.title };
+    if ((task.description || '') !== updates.description) changed.description = { from: task.description || '', to: updates.description };
+    if (task.priority !== updates.priority) changed.priority = { from: task.priority, to: updates.priority };
+    const oldDeadline = task.deadline ? new Date(task.deadline).toISOString() : null;
+    if (oldDeadline !== updates.deadline) changed.deadline = { from: oldDeadline, to: updates.deadline };
+    if (Object.keys(changed).length > 0) {
+      logActivity({
+        userId, userName: currentUserName,
+        action: ACTIONS.TASK_UPDATED,
+        targetType: 'task', targetId: task.id, targetTitle: newTitle,
+        details: { changed, source: 'modal' },
+        department: task.department,
+      });
+      // Thong bao cho nguoi nhan task (tru chinh minh) ve thay doi.
+      try {
+        const assigneeIds = (task.assignees || []).map(a => a.user_id).filter(id => id && id !== userId);
+        for (const aid of assigneeIds) {
+          await supabase.from('notifications').insert({
+            user_id: aid, type: 'info',
+            title: 'Task được cập nhật',
+            message: `${currentUserName || 'Ai đó'} đã sửa "${newTitle}"`,
+            task_id: task.id,
+          });
+          sendPush(aid, '✏️ Task được cập nhật', `${currentUserName || 'Ai đó'} sửa "${newTitle}"`, { url: '/dashboard', tag: 'edit-' + task.id });
+        }
+      } catch (e) { /* non-fatal */ }
+    }
+    toast('Đã lưu thay đổi', 'success');
+    setEditing(false);
+    setSavingEdit(false);
+    onRefresh && onRefresh();
+  }
+
+  // Bo nguoi nhan task. Confirm truoc khi xoa de tranh huy bo nham.
+  async function removeAssignee(uid, uname) {
+    if (!canAssign) return;
+    const ok = typeof window !== 'undefined' && window.confirm(`Bỏ ${uname || 'người này'} khỏi danh sách người nhận?`);
+    if (!ok) return;
+    const { error } = await supabase.from('task_assignees').delete().eq('task_id', task.id).eq('user_id', uid);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    logActivity({
+      userId, userName: currentUserName,
+      action: ACTIONS.TASK_ASSIGNEE_REMOVED,
+      targetType: 'task', targetId: task.id, targetTitle: task.title,
+      details: { removed_user_id: uid, removed_user_name: uname },
+      department: task.department,
+    });
+    toast('Đã bỏ ' + (uname || 'người này'), 'success');
+    onRefresh && onRefresh();
+  }
+
+  // Them nguoi nhan vao task. Bao notification + push cho nguoi moi.
+  async function addAssignee(m) {
+    if (!canAssign || !m) return;
+    const existing = (task.assignees || []).some(a => a.user_id === m.id);
+    if (existing) { toast(m.name + ' đã là người nhận', 'error'); return; }
+    const { error } = await supabase.from('task_assignees').insert({ task_id: task.id, user_id: m.id });
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    try {
+      await supabase.from('notifications').insert({
+        user_id: m.id, type: 'task_assigned',
+        title: 'Bạn được giao task',
+        message: (currentUserName || 'Ai đó') + ' vừa giao bạn task "' + task.title + '"',
+        task_id: task.id,
+      });
+      sendPush(m.id, '📋 Bạn được giao task', (currentUserName || 'Ai đó') + ': "' + task.title + '"', { url: '/dashboard', tag: 'assigned-' + task.id });
+    } catch (e) { /* non-fatal */ }
+    logActivity({
+      userId, userName: currentUserName,
+      action: ACTIONS.TASK_ASSIGNEE_ADDED,
+      targetType: 'task', targetId: task.id, targetTitle: task.title,
+      details: { added_user_id: m.id, added_user_name: m.name },
+      department: task.department,
+    });
+    toast('Đã giao cho ' + m.name, 'success');
+    setShowAddAssignee(false);
+    onRefresh && onRefresh();
+  }
+
+  // Bo nguoi theo doi task.
+  async function removeWatcher(uid, uname) {
+    if (!canAssign) return;
+    const ok = typeof window !== 'undefined' && window.confirm(`Bỏ ${uname || 'người này'} khỏi danh sách theo dõi?`);
+    if (!ok) return;
+    const { error } = await supabase.from('task_watchers').delete().eq('task_id', task.id).eq('user_id', uid);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    logActivity({
+      userId, userName: currentUserName,
+      action: ACTIONS.TASK_WATCHER_REMOVED,
+      targetType: 'task', targetId: task.id, targetTitle: task.title,
+      details: { removed_user_id: uid, removed_user_name: uname },
+      department: task.department,
+    });
+    toast('Đã bỏ theo dõi ' + (uname || 'người này'), 'success');
+    onRefresh && onRefresh();
+  }
+
+  // Them nguoi theo doi vao task. Khong duoc them nguoi da la assignee.
+  async function addWatcher(m) {
+    if (!canAssign || !m) return;
+    const existingW = (task.watchers || []).some(w => w.user_id === m.id);
+    const existingA = (task.assignees || []).some(a => a.user_id === m.id);
+    if (existingW) { toast(m.name + ' đã theo dõi task này', 'error'); return; }
+    if (existingA) { toast(m.name + ' đang là người nhận, không thêm theo dõi', 'error'); return; }
+    const { error } = await supabase.from('task_watchers').insert({ task_id: task.id, user_id: m.id });
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    try {
+      await supabase.from('notifications').insert({
+        user_id: m.id, type: 'info',
+        title: 'Bạn được thêm theo dõi',
+        message: (currentUserName || 'Ai đó') + ' thêm bạn theo dõi: "' + task.title + '"',
+        task_id: task.id,
+      });
+      sendPush(m.id, '👁 Theo dõi task', (currentUserName || 'Ai đó') + ' thêm bạn theo dõi: "' + task.title + '"', { url: '/dashboard', tag: 'watch-' + task.id });
+    } catch (e) { /* non-fatal */ }
+    logActivity({
+      userId, userName: currentUserName,
+      action: ACTIONS.TASK_WATCHER_ADDED,
+      targetType: 'task', targetId: task.id, targetTitle: task.title,
+      details: { added_user_id: m.id, added_user_name: m.name },
+      department: task.department,
+    });
+    toast('Đã thêm ' + m.name + ' theo dõi', 'success');
+    setShowAddWatcher(false);
+    onRefresh && onRefresh();
+  }
+
   if (!open || !task) return null;
 
   const st = ST[task.status] || ST.todo;
   const pr = PR[task.priority] || PR.medium;
   const od = task.deadline && new Date(task.deadline) < new Date() && task.status !== 'done';
   const canAssign = isAdmin || isDirector || task.created_by === userId;
+  // Quyen sua noi dung task = quyen quan ly assignees/watchers (cung 1 ruleset).
+  const canEdit = canAssign;
   const assigneeIds = (task.assignees || []).map(a => a.user_id);
   const suggestions = (draft.mentionedIds || [])
     .filter(mid => !assigneeIds.includes(mid) && mid !== userId)
@@ -267,11 +442,21 @@ export default function TaskDetailModal({
               {task.branch && <><span>·</span><span>{task.branch}</span></>}
               {task.department && <><span>·</span><span className="uppercase">{task.department}</span></>}
             </div>
-            <h2 className="text-base sm:text-lg font-semibold text-ink leading-snug" style={{ letterSpacing: '-.01em' }}>{task.title}</h2>
+            {editing ? (
+              <input
+                className="input-field !text-base !py-1.5 w-full font-semibold"
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                placeholder="Tiêu đề task"
+                autoFocus
+              />
+            ) : (
+              <h2 className="text-base sm:text-lg font-semibold text-ink leading-snug" style={{ letterSpacing: '-.01em' }}>{task.title}</h2>
+            )}
             <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
               <span className="pill" style={{ background: st.c + '15', color: st.c, fontSize: 10 }}>{st.l}</span>
-              <span className="pill" style={{ background: pr.c + '15', color: pr.c, fontSize: 10 }}>Ưu tiên {pr.l}</span>
-              {task.deadline && (
+              {!editing && <span className="pill" style={{ background: pr.c + '15', color: pr.c, fontSize: 10 }}>Ưu tiên {pr.l}</span>}
+              {!editing && task.deadline && (
                 <span className="pill font-mono" style={{
                   background: od ? 'var(--danger-soft)' : 'var(--bg-soft)',
                   color: od ? 'var(--danger)' : 'var(--muted)',
@@ -283,7 +468,52 @@ export default function TaskDetailModal({
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            {canPinTasks && (
+            {canEdit && !editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[color:var(--bg-soft)] transition-colors"
+                style={{ color: 'var(--accent)' }}
+                title="Sửa task"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            )}
+            {editing && (
+              <>
+                <button
+                  onClick={saveTaskEdit}
+                  disabled={savingEdit}
+                  className="px-3 h-8 rounded-lg text-xs font-semibold disabled:opacity-50"
+                  style={{ background: 'var(--accent)', color: '#fff' }}
+                  title="Lưu thay đổi"
+                >
+                  {savingEdit ? '...' : 'Lưu'}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditing(false);
+                    setEditTitle(task.title || '');
+                    setEditDesc(task.description || '');
+                    setEditPriority(task.priority || 'medium');
+                    if (task.deadline) {
+                      const d = new Date(task.deadline);
+                      const pad = n => String(n).padStart(2, '0');
+                      setEditDeadline(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+                    } else {
+                      setEditDeadline('');
+                    }
+                  }}
+                  className="px-3 h-8 rounded-lg text-xs font-medium"
+                  style={{ background: 'var(--bg-soft)', color: 'var(--muted)', border: '1px solid var(--line)' }}
+                  title="Huỷ thay đổi"
+                >
+                  Huỷ
+                </button>
+              </>
+            )}
+            {!editing && canPinTasks && (
               <button
                 onClick={togglePin}
                 className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[color:var(--bg-soft)] transition-colors"
@@ -295,25 +525,34 @@ export default function TaskDetailModal({
                 </svg>
               </button>
             )}
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[color:var(--bg-soft)] transition-colors"
-              style={{ color: 'var(--muted)' }}
-              title="Đóng"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            {!editing && (
+              <button
+                onClick={onClose}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[color:var(--bg-soft)] transition-colors"
+                style={{ color: 'var(--muted)' }}
+                title="Đóng"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-          {/* Description */}
+          {/* Description (view hoac edit) */}
           <div>
             <p className="eyebrow mb-1.5">Mô tả chi tiết</p>
-            {task.description ? (
+            {editing ? (
+              <textarea
+                className="input-field min-h-[80px] resize-y text-sm w-full"
+                value={editDesc}
+                onChange={e => setEditDesc(e.target.value)}
+                placeholder="Chi tiết công việc..."
+              />
+            ) : task.description ? (
               <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--ink-2)', lineHeight: 1.6 }}>
                 {task.description}
               </p>
@@ -324,6 +563,49 @@ export default function TaskDetailModal({
             )}
           </div>
 
+          {/* Priority + Deadline (chi hien khi edit) */}
+          {editing && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <p className="eyebrow mb-1.5">Ưu tiên</p>
+                <div className="flex gap-1.5">
+                  {[
+                    { v: 'high',   l: 'Cao',  color: 'var(--danger)', bg: 'var(--danger-soft)' },
+                    { v: 'medium', l: 'TB',   color: 'var(--warn)',   bg: 'var(--warn-soft)' },
+                    { v: 'low',    l: 'Thấp', color: 'var(--accent)', bg: 'var(--accent-soft)' },
+                  ].map(p => (
+                    <button
+                      key={p.v}
+                      type="button"
+                      onClick={() => setEditPriority(p.v)}
+                      className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                      style={editPriority === p.v ? {
+                        border: `1px solid ${p.color}`,
+                        background: p.bg,
+                        color: p.color,
+                      } : {
+                        border: '1px solid var(--line)',
+                        background: '#fff',
+                        color: 'var(--muted)',
+                      }}
+                    >
+                      {p.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="eyebrow mb-1.5">Deadline</p>
+                <input
+                  type="datetime-local"
+                  className="input-field !py-1.5 !text-xs w-full"
+                  value={editDeadline}
+                  onChange={e => setEditDeadline(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Metadata */}
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]" style={{ color: 'var(--muted)' }}>
             <span className="font-mono">Tạo · {fmtDT(task.created_at)}</span>
@@ -332,29 +614,132 @@ export default function TaskDetailModal({
             {task.creator?.name && <span>Giao bởi <strong className="font-medium" style={{ color: 'var(--ink-3)' }}>{task.creator.name}</strong></span>}
           </div>
 
-          {/* Assignees */}
-          {task.assignees?.length > 0 && (
-            <div>
-              <p className="eyebrow mb-1.5">Người nhận · {task.assignees.length}</p>
-              <div className="flex flex-wrap gap-1.5">
-                {task.assignees.map(a => (
+          {/* Assignees - co the sua khi canAssign */}
+          <div>
+            <p className="eyebrow mb-1.5">Người nhận{task.assignees?.length > 0 && ` · ${task.assignees.length}`}</p>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {(task.assignees || []).map(a => (
+                <div
+                  key={a.user_id}
+                  className="flex items-center gap-1.5 pl-0.5 pr-1 py-0.5 rounded-full text-xs group"
+                  style={{ background: 'var(--bg-soft)', border: '1px solid var(--line-2)' }}
+                >
                   <div
-                    key={a.user_id}
-                    className="flex items-center gap-1.5 pl-0.5 pr-2 py-0.5 rounded-full text-xs"
-                    style={{ background: 'var(--bg-soft)', border: '1px solid var(--line-2)' }}
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold"
+                    style={{ background: a.user?.avatar_color || 'var(--bg-soft)', color: 'var(--ink)' }}
                   >
-                    <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold"
-                      style={{ background: a.user?.avatar_color || 'var(--bg-soft)', color: 'var(--ink)' }}
-                    >
-                      {ini(a.user?.name)}
-                    </div>
-                    <span style={{ color: 'var(--ink-2)' }}>{a.user?.name}</span>
+                    {ini(a.user?.name)}
                   </div>
-                ))}
-              </div>
+                  <span className="pr-1" style={{ color: 'var(--ink-2)' }}>{a.user?.name}</span>
+                  {canAssign && (
+                    <button
+                      onClick={() => removeAssignee(a.user_id, a.user?.name)}
+                      className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 hover:bg-white transition-colors"
+                      style={{ color: 'var(--danger)' }}
+                      title={'Bỏ ' + (a.user?.name || '')}
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+              {canAssign && (
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowAddAssignee(v => !v); setShowAddWatcher(false); }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all hover:shadow-sm"
+                    style={{ background: '#fff', border: '1px dashed var(--accent)', color: 'var(--accent)' }}
+                    title="Thêm người nhận"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Thêm</span>
+                  </button>
+                  {showAddAssignee && (
+                    <MemberPicker
+                      members={(members || []).filter(m => !(task.assignees || []).some(a => a.user_id === m.id))}
+                      onPick={addAssignee}
+                      onClose={() => setShowAddAssignee(false)}
+                      taskDept={taskDept}
+                      taskBranch={taskBranch}
+                      title="Thêm người nhận"
+                    />
+                  )}
+                </div>
+              )}
+              {(task.assignees || []).length === 0 && !canAssign && (
+                <span className="text-xs italic" style={{ color: 'var(--muted)', opacity: 0.7 }}>(Chưa có người nhận)</span>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Watchers - nguoi theo doi task */}
+          <div>
+            <p className="eyebrow mb-1.5">Người theo dõi{task.watchers?.length > 0 && ` · ${task.watchers.length}`}</p>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {(task.watchers || []).map(w => (
+                <div
+                  key={w.user_id}
+                  className="flex items-center gap-1.5 pl-0.5 pr-1 py-0.5 rounded-full text-xs"
+                  style={{ background: 'var(--violet-soft, #ede9fe)', border: '1px solid var(--violet, #7c3aed)', borderColor: 'rgba(124,58,237,0.25)' }}
+                >
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold"
+                    style={{ background: w.user?.avatar_color || 'var(--bg-soft)', color: 'var(--ink)' }}
+                  >
+                    {ini(w.user?.name)}
+                  </div>
+                  <span className="pr-1" style={{ color: 'var(--violet, #6d28d9)' }}>{w.user?.name}</span>
+                  {canAssign && (
+                    <button
+                      onClick={() => removeWatcher(w.user_id, w.user?.name)}
+                      className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 hover:bg-white transition-colors"
+                      style={{ color: 'var(--danger)' }}
+                      title={'Bỏ theo dõi ' + (w.user?.name || '')}
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+              {canAssign && (
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowAddWatcher(v => !v); setShowAddAssignee(false); }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all hover:shadow-sm"
+                    style={{ background: '#fff', border: '1px dashed var(--violet, #7c3aed)', color: 'var(--violet, #6d28d9)' }}
+                    title="Thêm người theo dõi"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Thêm</span>
+                  </button>
+                  {showAddWatcher && (
+                    <MemberPicker
+                      members={(members || []).filter(m =>
+                        !(task.watchers || []).some(w => w.user_id === m.id)
+                        && !(task.assignees || []).some(a => a.user_id === m.id)
+                      )}
+                      onPick={addWatcher}
+                      onClose={() => setShowAddWatcher(false)}
+                      taskDept={taskDept}
+                      taskBranch={taskBranch}
+                      title="Thêm người theo dõi"
+                    />
+                  )}
+                </div>
+              )}
+              {(task.watchers || []).length === 0 && !canAssign && (
+                <span className="text-xs italic" style={{ color: 'var(--muted)', opacity: 0.7 }}>(Không có người theo dõi)</span>
+              )}
+            </div>
+          </div>
 
           {/* Overdue reason banner */}
           {task.overdue_reason && (
@@ -529,6 +914,77 @@ export default function TaskDetailModal({
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Picker chon member: dropdown nho mo o duoi nut "+ Them".
+// Loc theo dept/branch giong logic mentionables o tren cho nhat quan.
+function MemberPicker({ members, onPick, onClose, taskDept, taskBranch, title }) {
+  const [query, setQuery] = useState('');
+  const norm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const filtered = (members || []).filter(m => {
+    // Loc theo dept/branch giong rule mentionables.
+    if (m.role !== 'director' && m.role !== 'accountant') {
+      if (m.department !== taskDept) return false;
+      if (taskDept === 'nail' && taskBranch) {
+        const mb = Array.isArray(m.branches) ? m.branches : [];
+        if (mb.length === 0) return false;
+        if (!mb.includes(taskBranch)) return false;
+      }
+    }
+    if (!query) return true;
+    return norm(m.name).includes(norm(query));
+  }).slice(0, 12);
+
+  // Dong khi click ra ngoai.
+  useEffect(() => {
+    function onDocClick(e) {
+      const root = document.getElementById('member-picker-root');
+      if (root && !root.contains(e.target)) onClose && onClose();
+    }
+    setTimeout(() => document.addEventListener('mousedown', onDocClick), 0);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [onClose]);
+
+  return (
+    <div
+      id="member-picker-root"
+      className="absolute left-0 top-full mt-1 w-64 max-h-72 rounded-lg z-30 flex flex-col animate-fade-in"
+      style={{ background: '#fff', border: '1px solid var(--line)', boxShadow: '0 12px 24px rgba(18,53,36,0.12)' }}
+    >
+      <div className="px-2.5 py-2 flex-shrink-0" style={{ borderBottom: '1px solid var(--line-2)' }}>
+        <p className="text-[10px] uppercase font-semibold mb-1" style={{ color: 'var(--muted)' }}>{title || 'Chọn người'}</p>
+        <input
+          className="input-field !py-1.5 !text-xs w-full"
+          placeholder="Tìm theo tên..."
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          autoFocus
+        />
+      </div>
+      <div className="overflow-y-auto flex-1">
+        {filtered.length === 0 ? (
+          <p className="text-xs text-center py-4" style={{ color: 'var(--muted)' }}>Không có ai phù hợp</p>
+        ) : filtered.map(m => (
+          <button
+            key={m.id}
+            onClick={() => onPick(m)}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[color:var(--bg-soft)]"
+          >
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0" style={{ background: m.avatar_color || 'var(--bg-soft)', color: 'var(--ink)' }}>
+              {(m.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate" style={{ color: 'var(--ink)' }}>{m.name}</p>
+              <p className="text-[10px] truncate" style={{ color: 'var(--muted)' }}>
+                {m.role === 'director' ? 'Tổng Giám đốc' : m.role === 'accountant' ? 'Kế toán' : (m.position || '')}
+                {m.department ? ` · ${m.department === 'hotel' ? 'Hotel' : 'Nail'}` : ''}
+              </p>
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );

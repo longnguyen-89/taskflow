@@ -182,6 +182,13 @@ export default function Proposals({ userId, userName, members, department, branc
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [filterCat, setFilterCat] = useState('all');
+  // Edit mode cho de xuat / thanh toan. Mot luc chi sua 1 de xuat.
+  // editForm chua snapshot tam thoi cua field dang sua; khi luu thi viet vao DB va clear.
+  const [editingProposalId, setEditingProposalId] = useState(null);
+  const [editForm, setEditForm] = useState({ title: '', desc: '', cost: '', catId: '', branch: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
+  // pickerOpen luu pid+kind ('approver' | 'watcher') de mo dropdown chi 1 cho cung luc.
+  const [pickerOpen, setPickerOpen] = useState(null);
 
   // Chi nhánh user được phép tạo đề xuất cho (TGĐ/KT: 4 cn, admin: cn phụ trách, member: 1 cn).
   const createBranchOptions = (department === 'nail')
@@ -420,6 +427,171 @@ export default function Proposals({ userId, userName, members, department, branc
     const pObj = proposals.find(pr => pr.id === pid);
     logActivity({ userId: uid, userName: members.find(m => m.id === uid)?.name, action: action === 'approved' ? ACTIONS.PROPOSAL_APPROVED : ACTIONS.PROPOSAL_REJECTED, targetType: 'proposal', targetId: pid, targetTitle: pObj?.title, department: pObj?.department });
     toast(action === 'approved' ? 'Đã duyệt!' : 'Đã từ chối', 'success'); fetchAll();
+  }
+
+  // Permission sua de xuat: ai duoc sua + co dieu kien khoa khi da duyet xong.
+  // - canDeleteProposal/isDirector/admin/creator deu duoc sua khi pending/partial.
+  // - Khi approved/rejected: KHOA, tranh hau qua phap ly (de xuat cuoi cung khong duoc sua nua).
+  function canEditProposal(p) {
+    if (!p) return false;
+    if (p.status === 'approved' || p.status === 'rejected') return false;
+    return isDirector || profile?.role === 'admin' || p.created_by === userId;
+  }
+
+  function startEditProposal(p) {
+    if (!canEditProposal(p)) return;
+    setEditingProposalId(p.id);
+    setEditForm({
+      title: p.title || '',
+      desc: p.description || '',
+      cost: p.estimated_cost ? formatVND(String(p.estimated_cost)) : '',
+      catId: p.category_id || '',
+      branch: p.branch || '',
+    });
+    setPickerOpen(null);
+  }
+
+  function cancelEditProposal() {
+    setEditingProposalId(null);
+    setEditForm({ title: '', desc: '', cost: '', catId: '', branch: '' });
+  }
+
+  async function saveProposalEdit(p) {
+    const newTitle = (editForm.title || '').trim();
+    if (!newTitle) { toast('Tiêu đề không được để trống', 'error'); return; }
+    setSavingEdit(true);
+    const costRaw = editForm.cost ? parseInt(parseVND(editForm.cost)) : null;
+    const tabLabel = MAIN_TABS.find(t => t.id === activeTab)?.label || 'Mua hàng';
+    const catName = editForm.catId
+      ? (categories.find(c => c.id === editForm.catId)?.name || p.category_name || tabLabel)
+      : (p.category_name || tabLabel);
+    const updates = {
+      title: newTitle,
+      description: (editForm.desc || '').trim(),
+      estimated_cost: costRaw,
+      category_id: editForm.catId || null,
+      category_name: catName,
+      branch: department === 'nail' ? (editForm.branch || null) : null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('proposals').update(updates).eq('id', p.id);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); setSavingEdit(false); return; }
+    // Ghi log cac field thuc su thay doi.
+    const changed = {};
+    if ((p.title || '') !== updates.title) changed.title = { from: p.title || '', to: updates.title };
+    if ((p.description || '') !== updates.description) changed.description = { from: p.description || '', to: updates.description };
+    if ((p.estimated_cost || null) !== updates.estimated_cost) changed.cost = { from: p.estimated_cost, to: updates.estimated_cost };
+    if ((p.category_id || null) !== updates.category_id) changed.category = { from: p.category_name, to: updates.category_name };
+    if ((p.branch || null) !== updates.branch) changed.branch = { from: p.branch, to: updates.branch };
+    if (Object.keys(changed).length > 0) {
+      logActivity({
+        userId, userName,
+        action: ACTIONS.PROPOSAL_UPDATED,
+        targetType: 'proposal', targetId: p.id, targetTitle: newTitle,
+        details: { changed }, department, branch: updates.branch,
+      });
+      // Thong bao cho nguoi duyet + theo doi (tru chinh nguoi sua).
+      try {
+        const relatedIds = [
+          ...((p.approvers || []).map(a => a.user_id)),
+          ...((p.watchers || []).map(w => w.user_id)),
+        ].filter(id => id && id !== userId);
+        const unique = Array.from(new Set(relatedIds));
+        for (const uid of unique) {
+          await supabase.from('notifications').insert({
+            user_id: uid, type: 'info',
+            title: 'Đề xuất được cập nhật',
+            message: `${userName || 'Ai đó'} sửa: "${newTitle}"`,
+            proposal_id: p.id,
+          });
+          sendPush(uid, '✏️ Đề xuất được cập nhật', `${userName || 'Ai đó'} sửa: "${newTitle}"`, { url: '/dashboard', tag: 'edit-p-' + p.id });
+        }
+      } catch (e) { /* non-fatal */ }
+    }
+    toast('Đã lưu thay đổi', 'success');
+    setEditingProposalId(null);
+    setSavingEdit(false);
+    fetchAll();
+  }
+
+  async function removeApprover(pid, uid, uname) {
+    const ok = typeof window !== 'undefined' && window.confirm(`Bỏ ${uname || 'người này'} khỏi danh sách người duyệt?`);
+    if (!ok) return;
+    const { error } = await supabase.from('proposal_approvers').delete().eq('proposal_id', pid).eq('user_id', uid);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    const p = proposals.find(pp => pp.id === pid);
+    logActivity({
+      userId, userName,
+      action: ACTIONS.PROPOSAL_APPROVER_REMOVED,
+      targetType: 'proposal', targetId: pid, targetTitle: p?.title,
+      details: { removed_user_id: uid, removed_user_name: uname },
+      department, branch: p?.branch,
+    });
+    toast('Đã bỏ ' + (uname || 'người này'), 'success');
+    fetchAll();
+  }
+
+  async function addApprover(pid, m) {
+    if (!m) return;
+    const p = proposals.find(pp => pp.id === pid);
+    if (!p) return;
+    if ((p.approvers || []).some(a => a.user_id === m.id)) { toast(m.name + ' đã là người duyệt', 'error'); return; }
+    const { error } = await supabase.from('proposal_approvers').insert({ proposal_id: pid, user_id: m.id });
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    try {
+      await supabase.from('notifications').insert({ user_id: m.id, type: 'approval_request', title: 'Đề xuất cần duyệt', message: `${userName || 'Ai đó'}: "${p.title}"`, proposal_id: pid });
+      sendPush(m.id, '📝 Đề xuất cần duyệt', `${userName || 'Ai đó'}: "${p.title}"`, { url: '/dashboard', tag: 'proposal-' + pid });
+    } catch (e) { /* non-fatal */ }
+    logActivity({
+      userId, userName,
+      action: ACTIONS.PROPOSAL_APPROVER_ADDED,
+      targetType: 'proposal', targetId: pid, targetTitle: p.title,
+      details: { added_user_id: m.id, added_user_name: m.name },
+      department, branch: p.branch,
+    });
+    toast('Đã thêm ' + m.name + ' duyệt', 'success');
+    setPickerOpen(null);
+    fetchAll();
+  }
+
+  async function removeWatcherP(pid, uid, uname) {
+    const ok = typeof window !== 'undefined' && window.confirm(`Bỏ ${uname || 'người này'} khỏi danh sách theo dõi?`);
+    if (!ok) return;
+    const { error } = await supabase.from('proposal_watchers').delete().eq('proposal_id', pid).eq('user_id', uid);
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    const p = proposals.find(pp => pp.id === pid);
+    logActivity({
+      userId, userName,
+      action: ACTIONS.PROPOSAL_WATCHER_REMOVED,
+      targetType: 'proposal', targetId: pid, targetTitle: p?.title,
+      details: { removed_user_id: uid, removed_user_name: uname },
+      department, branch: p?.branch,
+    });
+    toast('Đã bỏ theo dõi ' + (uname || 'người này'), 'success');
+    fetchAll();
+  }
+
+  async function addWatcherP(pid, m) {
+    if (!m) return;
+    const p = proposals.find(pp => pp.id === pid);
+    if (!p) return;
+    if ((p.watchers || []).some(w => w.user_id === m.id)) { toast(m.name + ' đã theo dõi', 'error'); return; }
+    const { error } = await supabase.from('proposal_watchers').insert({ proposal_id: pid, user_id: m.id });
+    if (error) { toast('Lỗi: ' + error.message, 'error'); return; }
+    try {
+      await supabase.from('notifications').insert({ user_id: m.id, type: 'info', title: 'Đề xuất để theo dõi', message: `${userName || 'Ai đó'}: "${p.title}"`, proposal_id: pid });
+      sendPush(m.id, '👁 Đề xuất theo dõi', `${userName || 'Ai đó'}: "${p.title}"`, { url: '/dashboard', tag: 'proposal-w-' + pid });
+    } catch (e) { /* non-fatal */ }
+    logActivity({
+      userId, userName,
+      action: ACTIONS.PROPOSAL_WATCHER_ADDED,
+      targetType: 'proposal', targetId: pid, targetTitle: p.title,
+      details: { added_user_id: m.id, added_user_name: m.name },
+      department, branch: p.branch,
+    });
+    toast('Đã thêm ' + m.name + ' theo dõi', 'success');
+    setPickerOpen(null);
+    fetchAll();
   }
 
   const ini = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
@@ -872,18 +1044,97 @@ export default function Proposals({ userId, userName, members, department, branc
               </div>
               {isExp && (
                 <div className="mt-3 pt-3 border-t border-gray-100 animate-fade-in">
-                  {effCanDeleteProp && (
-                    <div className="flex justify-end mb-2">
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteProposal(p.id, p.title); }}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-red-600 hover:bg-red-50 transition-colors"
-                        title="Xoá vĩnh viễn">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
-                        Xoá đề xuất
-                      </button>
+                  {/* Toolbar: nut Sua + Xoa */}
+                  {(canEditProposal(p) || effCanDeleteProp) && (
+                    <div className="flex justify-end gap-1 mb-2">
+                      {canEditProposal(p) && editingProposalId !== p.id && (
+                        <button onClick={(e) => { e.stopPropagation(); startEditProposal(p); }}
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors"
+                          style={{ color: 'var(--accent)', background: 'var(--accent-soft)' }}
+                          title="Sửa đề xuất">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                          Sửa
+                        </button>
+                      )}
+                      {(p.status === 'approved' || p.status === 'rejected') && (isDirector || profile?.role === 'admin' || p.created_by === userId) && (
+                        <span className="text-[10px] px-2 py-1 rounded-lg" style={{ background: 'var(--bg-soft)', color: 'var(--muted)' }} title="Đề xuất đã chốt, không thể sửa">🔒 Đã chốt</span>
+                      )}
+                      {effCanDeleteProp && (
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteProposal(p.id, p.title); }}
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                          title="Xoá vĩnh viễn">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                          Xoá đề xuất
+                        </button>
+                      )}
                     </div>
                   )}
-                  {p.description && <p className="text-xs text-gray-600 mb-2 leading-relaxed">{p.description}</p>}
-                  {p.estimated_cost && <p className="text-xs mb-2">Chi phí: <strong>{fmtCost(p.estimated_cost)}</strong></p>}
+
+                  {/* Edit form khi dang sua de xuat */}
+                  {editingProposalId === p.id ? (
+                    <div className="space-y-2 p-3 rounded-lg mb-3" style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent)' }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--accent)' }}>Đang sửa đề xuất</p>
+                      {department === 'nail' && createBranchOptions.length > 0 && (
+                        <div>
+                          <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: 'var(--muted)' }}>Chi nhánh</label>
+                          <div className="flex gap-1 flex-wrap">
+                            {createBranchOptions.map(bid => (
+                              <button key={bid} type="button" onClick={() => setEditForm(f => ({ ...f, branch: bid }))}
+                                className="px-2 py-1 rounded-lg text-[10px] font-medium"
+                                style={editForm.branch === bid
+                                  ? { background: '#fff', border: '1px solid var(--accent)', color: 'var(--accent)' }
+                                  : { background: '#fff', border: '1px solid var(--line)', color: 'var(--muted)' }}>
+                                {branchLabel(bid)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: 'var(--muted)' }}>Tiêu đề *</label>
+                          <input className="input-field !text-xs !py-1.5" value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: 'var(--muted)' }}>Phân loại</label>
+                          <select className="input-field !text-xs !py-1.5" value={editForm.catId} onChange={e => setEditForm(f => ({ ...f, catId: e.target.value }))}>
+                            <option value="">— {p.category_name || 'Mặc định'} —</option>
+                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: 'var(--muted)' }}>Mô tả</label>
+                        <textarea className="input-field !text-xs min-h-[60px] resize-y" value={editForm.desc} onChange={e => setEditForm(f => ({ ...f, desc: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: 'var(--muted)' }}>Chi phí · VNĐ</label>
+                        <input className="input-field !text-xs !py-1.5" type="text" inputMode="numeric" value={editForm.cost}
+                          onChange={e => setEditForm(f => ({ ...f, cost: formatVND(e.target.value) }))}
+                          placeholder="VD: 1.000.000" />
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => saveProposalEdit(p)} disabled={savingEdit}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                          style={{ background: 'var(--accent)' }}>
+                          {savingEdit ? 'Đang lưu...' : 'Lưu thay đổi'}
+                        </button>
+                        <button onClick={cancelEditProposal}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                          style={{ background: '#fff', color: 'var(--muted)', border: '1px solid var(--line)' }}>
+                          Huỷ
+                        </button>
+                      </div>
+                      <p className="text-[10px] italic" style={{ color: 'var(--muted)' }}>
+                        Lưu ý: chi tiết mặt hàng và file đính kèm sẽ giữ nguyên. Để sửa items/file, xoá và tạo lại đề xuất.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {p.description && <p className="text-xs text-gray-600 mb-2 leading-relaxed">{p.description}</p>}
+                      {p.estimated_cost && <p className="text-xs mb-2">Chi phí: <strong>{fmtCost(p.estimated_cost)}</strong></p>}
+                    </>
+                  )}
 
                   {/* Chi tiết mặt hàng (readonly) — chỉ hiện nếu có items */}
                   {Array.isArray(p.items) && p.items.length > 0 && (
@@ -974,21 +1225,115 @@ export default function Proposals({ userId, userName, members, department, branc
                   )}
 
                   {p.files?.length > 0 && (<div className="mb-3"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">File đính kèm ({p.files.length})</p><div className="space-y-1">{p.files.map(f => <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"><span className="text-sm flex-shrink-0">{getFileIcon(f.file_name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.file_name}</span><span className="text-[9px] text-gray-400 flex-shrink-0">{formatFileSize(f.file_size)}</span><svg className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></a>)}</div></div>)}
-                  <div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Người duyệt</p>
-                    {p.approvers?.map(a => (
-                      <div key={a.id} className="flex items-center gap-2 mb-1">
-                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold" style={{ background: a.user?.avatar_color, color: '#333' }}>{ini(a.user?.name)}</div>
-                        <span className="text-xs flex-1">{a.user?.name}</span>
-                        {a.status === 'approved' && <span className="text-[10px] text-green-600 font-semibold">✓ Duyệt {a.decided_at ? fmtDT(a.decided_at) : ''}</span>}
-                        {a.status === 'rejected' && <span className="text-[10px] text-red-600 font-semibold">✗ Từ chối</span>}
-                        {a.status === 'pending' && a.user_id === userId && effCanApproveProp && (
-                          <div className="flex gap-1"><button onClick={() => handleApprove(p.id, userId, 'approved')} className="px-2 py-0.5 bg-green-600 text-white rounded text-[10px]">Duyệt</button><button onClick={() => handleApprove(p.id, userId, 'rejected')} className="px-2 py-0.5 bg-red-600 text-white rounded text-[10px]">Từ chối</button></div>
+                  <div className="mb-2">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Người duyệt</p>
+                    {p.approvers?.map(a => {
+                      // Chi cho phep xoa approver khi van con o trang thai pending va co quyen sua.
+                      const canRemove = canEditProposal(p) && a.status === 'pending';
+                      return (
+                        <div key={a.id} className="flex items-center gap-2 mb-1 group">
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold" style={{ background: a.user?.avatar_color, color: '#333' }}>{ini(a.user?.name)}</div>
+                          <span className="text-xs flex-1">{a.user?.name}</span>
+                          {a.status === 'approved' && <span className="text-[10px] text-green-600 font-semibold">✓ Duyệt {a.decided_at ? fmtDT(a.decided_at) : ''}</span>}
+                          {a.status === 'rejected' && <span className="text-[10px] text-red-600 font-semibold">✗ Từ chối</span>}
+                          {a.status === 'pending' && a.user_id === userId && effCanApproveProp && (
+                            <div className="flex gap-1"><button onClick={() => handleApprove(p.id, userId, 'approved')} className="px-2 py-0.5 bg-green-600 text-white rounded text-[10px]">Duyệt</button><button onClick={() => handleApprove(p.id, userId, 'rejected')} className="px-2 py-0.5 bg-red-600 text-white rounded text-[10px]">Từ chối</button></div>
+                          )}
+                          {a.status === 'pending' && (a.user_id !== userId || !effCanApproveProp) && <span className="text-[10px] text-amber-600">Chờ...</span>}
+                          {canRemove && (
+                            <button
+                              onClick={() => removeApprover(p.id, a.user_id, a.user?.name)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-0.5 rounded hover:bg-red-50"
+                              style={{ color: 'var(--danger, #dc2626)' }}
+                              title={'Bỏ ' + (a.user?.name || '')}
+                            >
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {canEditProposal(p) && (
+                      <div className="relative inline-block mt-1">
+                        <button
+                          onClick={() => setPickerOpen(pickerOpen === `${p.id}:approver` ? null : `${p.id}:approver`)}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all hover:shadow-sm"
+                          style={{ background: '#fff', border: '1px dashed #16a34a', color: '#16a34a' }}
+                          title="Thêm người duyệt"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                          </svg>
+                          <span>Thêm người duyệt</span>
+                        </button>
+                        {pickerOpen === `${p.id}:approver` && (
+                          <ProposalMemberPicker
+                            members={approvers.filter(m => !(p.approvers || []).some(a => a.user_id === m.id))}
+                            onPick={(m) => addApprover(p.id, m)}
+                            onClose={() => setPickerOpen(null)}
+                            title="Thêm người duyệt"
+                            ini={ini}
+                          />
                         )}
-                        {a.status === 'pending' && (a.user_id !== userId || !effCanApproveProp) && <span className="text-[10px] text-amber-600">Chờ...</span>}
                       </div>
-                    ))}
+                    )}
                   </div>
-                  {p.watchers?.length > 0 && (<div className="mb-2"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Theo dõi</p><div className="flex gap-1 flex-wrap">{p.watchers.map(w => <span key={w.id} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] text-gray-500">{w.user?.name}</span>)}</div></div>)}
+
+                  <div className="mb-2">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Theo dõi{p.watchers?.length > 0 && ` (${p.watchers.length})`}</p>
+                    <div className="flex gap-1 flex-wrap items-center">
+                      {(p.watchers || []).map(w => (
+                        <div key={w.id} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] group" style={{ background: 'var(--bg-soft, #f3f4f6)', color: 'var(--muted)' }}>
+                          <span>{w.user?.name}</span>
+                          {canEditProposal(p) && (
+                            <button
+                              onClick={() => removeWatcherP(p.id, w.user_id, w.user?.name)}
+                              className="opacity-60 group-hover:opacity-100 flex-shrink-0 transition-opacity"
+                              style={{ color: 'var(--danger, #dc2626)' }}
+                              title={'Bỏ theo dõi ' + (w.user?.name || '')}
+                            >
+                              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {canEditProposal(p) && (
+                        <div className="relative">
+                          <button
+                            onClick={() => setPickerOpen(pickerOpen === `${p.id}:watcher` ? null : `${p.id}:watcher`)}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all hover:shadow-sm"
+                            style={{ background: '#fff', border: '1px dashed #6b7280', color: '#6b7280' }}
+                            title="Thêm người theo dõi"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span>Thêm theo dõi</span>
+                          </button>
+                          {pickerOpen === `${p.id}:watcher` && (
+                            <ProposalMemberPicker
+                              members={deptMembers.filter(m =>
+                                m.id !== userId
+                                && !(p.watchers || []).some(w => w.user_id === m.id)
+                                && !(p.approvers || []).some(a => a.user_id === m.id)
+                              )}
+                              onPick={(m) => addWatcherP(p.id, m)}
+                              onClose={() => setPickerOpen(null)}
+                              title="Thêm người theo dõi"
+                              ini={ini}
+                            />
+                          )}
+                        </div>
+                      )}
+                      {(p.watchers || []).length === 0 && !canEditProposal(p) && (
+                        <span className="text-[10px] italic" style={{ color: 'var(--muted)' }}>(Không có)</span>
+                      )}
+                    </div>
+                  </div>
                   <div className="mt-2 pt-2 border-t border-gray-100">
                     <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Bình luận {comments[p.id]?.length > 0 && `(${comments[p.id].length})`}</p>
                     {comments[p.id]?.map(c => (<div key={c.id} className="flex gap-2 mb-2"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold flex-shrink-0" style={{ background: c.user?.avatar_color, color: '#333' }}>{ini(c.user?.name)}</div><div className="flex-1 min-w-0"><p className="text-[10px]"><strong>{c.user?.name}</strong> · {timeAgo(c.created_at)}</p>{c.content && <p className="text-xs text-gray-600">{renderMentions(c.content, mentionables)}</p>}{c.files && c.files.length > 0 && <div className="space-y-1 mt-1">{c.files.map((f, fi) => <a key={fi} href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 group"><span className="text-sm">{getFileIcon(f.name)}</span><span className="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600">{f.name}</span><span className="text-[9px] text-gray-400">{formatFileSize(f.size)}</span></a>)}</div>}</div></div>))}
@@ -1034,6 +1379,66 @@ export default function Proposals({ userId, userName, members, department, branc
           ));
         })()}
         {filteredProposals.length === 0 && <div className="card p-10 text-center text-gray-400 text-sm">Chưa có đề xuất nào trong mục này</div>}
+      </div>
+    </div>
+  );
+}
+
+// Picker chon member cho de xuat (approver hoac watcher). Dung lai cho ca 2 truong hop.
+function ProposalMemberPicker({ members, onPick, onClose, title, ini }) {
+  const [query, setQuery] = useState('');
+  const norm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const filtered = (members || []).filter(m => {
+    if (!query) return true;
+    return norm(m.name).includes(norm(query));
+  }).slice(0, 12);
+
+  useEffect(() => {
+    function onDocClick(e) {
+      const root = document.getElementById('proposal-picker-root');
+      if (root && !root.contains(e.target)) onClose && onClose();
+    }
+    const t = setTimeout(() => document.addEventListener('mousedown', onDocClick), 0);
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', onDocClick); };
+  }, [onClose]);
+
+  return (
+    <div
+      id="proposal-picker-root"
+      className="absolute left-0 top-full mt-1 w-64 max-h-72 rounded-lg z-30 flex flex-col animate-fade-in"
+      style={{ background: '#fff', border: '1px solid var(--line)', boxShadow: '0 12px 24px rgba(18,53,36,0.12)' }}
+    >
+      <div className="px-2.5 py-2 flex-shrink-0" style={{ borderBottom: '1px solid var(--line-2)' }}>
+        <p className="text-[10px] uppercase font-semibold mb-1" style={{ color: 'var(--muted)' }}>{title || 'Chọn người'}</p>
+        <input
+          className="input-field !py-1.5 !text-xs w-full"
+          placeholder="Tìm theo tên..."
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          autoFocus
+        />
+      </div>
+      <div className="overflow-y-auto flex-1">
+        {filtered.length === 0 ? (
+          <p className="text-xs text-center py-4" style={{ color: 'var(--muted)' }}>Không có ai phù hợp</p>
+        ) : filtered.map(m => (
+          <button
+            key={m.id}
+            onClick={() => onPick(m)}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[color:var(--bg-soft)]"
+          >
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0" style={{ background: m.avatar_color || 'var(--bg-soft)', color: 'var(--ink)' }}>
+              {ini ? ini(m.name) : (m.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate" style={{ color: 'var(--ink)' }}>{m.name}</p>
+              <p className="text-[10px] truncate" style={{ color: 'var(--muted)' }}>
+                {m.role === 'director' ? 'Tổng Giám đốc' : m.role === 'accountant' ? 'Kế toán' : (m.position || '')}
+                {m.department ? ` · ${m.department === 'hotel' ? 'Hotel' : 'Nail'}` : ''}
+              </p>
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );
