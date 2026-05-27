@@ -1094,7 +1094,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {showSearch && <SearchModal tasks={tasks} onClose={() => setShowSearch(false)} onSelect={() => { setShowSearch(false); setTab('dashboard'); }} />}
+      {showSearch && <SearchModal tasks={tasks} onClose={() => setShowSearch(false)} onSelect={(t) => { setShowSearch(false); openTaskDetail(t.id); }} />}
 
       {/* Task detail modal — mở từ click notification, focus list, etc. */}
       <TaskDetailModal
