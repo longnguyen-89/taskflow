@@ -59,7 +59,7 @@ export default function RecurringTasks({ members, department, userId, taskGroups
   const [existingFiles, setExistingFiles] = useState([]); // [{file_name, file_url, file_type, file_size}]
   const [uploading, setUploading] = useState(false);
 
-  const deptMembers = members.filter(m => m.department === department || m.role === 'director' || m.role === 'accountant');
+  const deptMembers = members.filter(m => m.active !== false && (m.department === department || m.role === 'director' || m.role === 'accountant'));
 
   const fetchList = useCallback(async () => {
     setLoading(true);

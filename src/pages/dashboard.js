@@ -1078,10 +1078,10 @@ export default function Dashboard() {
                   )}
                 </div>
               )}
-              {tab === 'create' && canCreateTask && <CreateTask members={members.filter(m => m.department === dept || m.role === 'accountant' || m.role === 'director')} userId={user.id} userName={profile.name} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
+              {tab === 'create' && canCreateTask && <CreateTask members={members.filter(m => m.active !== false && (m.department === dept || m.role === 'accountant' || m.role === 'director'))} userId={user.id} userName={profile.name} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
               {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} profile={profile} isDirector={isDirector} isAccountant={isAccountant} canApprove={canApprove} canApproveProposal={canApproveProposal} canDeleteProposal={canDeleteProposal} focusProposalId={focusProposalId} clearFocus={() => setFocusProposalId(null)} />}
               {tab === 'performance' && canViewReports && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isDirector || isAccountant} isDirector={isDirector} />}
-              {tab === 'mytasks' && <MyTasks tasks={myAllTasks} members={members} userId={user.id} onOpenTask={openTaskById} profileName={profile.name} />}
+              {tab === 'mytasks' && <MyTasks tasks={myAllTasks} members={members} userId={user.id} onOpenTask={openTaskDetail} profileName={profile.name} />}
               {tab === 'notifications' && <Notifications notifications={notifications} userId={user.id} onRefresh={fetchData} onOpen={handleOpenNotification} />}
               {tab === 'admin' && (isDirector || canManageUsers) && (
                 <ErrorBoundary>

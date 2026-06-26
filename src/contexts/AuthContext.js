@@ -34,6 +34,14 @@ export function AuthProvider({ children }) {
   async function fetchProfile(uid) {
     try {
       const { data: profData } = await supabase.from('profiles').select('*').eq('id', uid).single();
+      // Tài khoản đã bị cho ngừng hoạt động -> đăng xuất ngay, không cho vào app.
+      if (profData && profData.active === false) {
+        setProfile(null);
+        setLoading(false);
+        await supabase.auth.signOut();
+        if (typeof window !== 'undefined') alert('Tài khoản của bạn đã ngừng hoạt động. Vui lòng liên hệ quản trị viên.');
+        return;
+      }
       setProfile(profData);
       // Load permissions separately - non-blocking, fallback to defaults
       try {

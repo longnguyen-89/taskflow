@@ -97,6 +97,7 @@ export default function TaskList({ tasks, members, isAdmin, isDirector, canDelet
     const tBranch = t?.branch || null;
     return (members || []).filter(m => {
       if (m.id === userId) return false;
+      if (m.active === false) return false; // không gợi ý giao cho tài khoản đã ngừng hoạt động
       if (m.role === 'director' || m.role === 'accountant') return true;
       if (m.department !== tDept) return false;
       if (tDept === 'nail' && tBranch) {

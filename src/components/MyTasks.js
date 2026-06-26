@@ -1,5 +1,5 @@
 // MyTasks.js — "Task của tôi": tất cả task liên quan đến user, nhóm theo ngày deadline.
-// Click 1 task -> gọi onOpenTask để dashboard focus & expand task đó trong tab Dashboard.
+// Click 1 task -> gọi onOpenTask để mở thẳng modal chi tiết task (openTaskDetail).
 import { useState, useMemo } from 'react';
 
 const ST = {
@@ -99,6 +99,56 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
     };
   }, [filtered]);
 
+  // "Đã giao" — Kanban theo từng nhân viên: task tôi giao cho người khác, gom theo người được giao.
+  // Mục đích: theo dõi cv nào đã giao nhưng chưa thực hiện/chưa hoàn thành -> tránh giao trùng.
+  const assignedBoard = useMemo(() => {
+    // Chỉ lấy task gốc do TÔI giao, có người được giao (không tính task tự giao cho chính mình).
+    const assigned = (tasks || []).filter(t =>
+      t.approval_status !== 'pending' &&
+      !t.parent_id &&
+      t.created_by === userId &&
+      (t.assignees?.length > 0)
+    );
+
+    const STATUS_ORDER = { doing: 0, waiting: 1, todo: 2, done: 3 };
+    const byId = new Map(); // assigneeId -> { member, pending:[], done:[] }
+
+    for (const t of assigned) {
+      for (const a of (t.assignees || [])) {
+        const uid = a.user_id;
+        if (uid === userId) continue; // bỏ task tự giao cho mình
+        if (!byId.has(uid)) {
+          const m = members?.find(mm => mm.id === uid);
+          byId.set(uid, {
+            id: uid,
+            name: a.user?.name || m?.name || 'Nhân viên',
+            avatar_color: a.user?.avatar_color || m?.avatar_color,
+            position: a.user?.position || m?.position || '',
+            pending: [],
+            done: [],
+          });
+        }
+        const col = byId.get(uid);
+        if (t.status === 'done') col.done.push(t);
+        else col.pending.push(t);
+      }
+    }
+
+    const cols = Array.from(byId.values());
+    const sortTasks = (a, b) => {
+      const so = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+      if (so !== 0) return so;
+      return new Date(a.deadline || '2999-12-31') - new Date(b.deadline || '2999-12-31');
+    };
+    cols.forEach(c => { c.pending.sort(sortTasks); c.done.sort(sortTasks); });
+    // Nhiều việc chưa xong đứng trước -> dễ thấy ai đang quá tải.
+    cols.sort((a, b) => b.pending.length - a.pending.length || a.name.localeCompare(b.name, 'vi'));
+
+    const totalPending = cols.reduce((s, c) => s + c.pending.length, 0);
+    const totalDone = cols.reduce((s, c) => s + c.done.length, 0);
+    return { cols, totalPending, totalDone, totalPeople: cols.length };
+  }, [tasks, members, userId]);
+
   function relation(t) {
     const isAssignee = t.assignees?.some(a => a.user_id === userId);
     const isWatcher = t.watchers?.some(w => w.user_id === userId);
@@ -184,6 +234,89 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
     );
   }
 
+  function avatarInitials(n) {
+    return n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+  }
+
+  function KanbanCard({ t }) {
+    const st = ST[t.status] || ST.todo;
+    const done = t.status === 'done';
+    const od = !done && t.deadline && new Date(t.deadline) < new Date();
+    const dueColor = od ? 'var(--danger)' : (ymdVN(t.deadline) === todayVN() ? 'var(--warn)' : 'var(--ink-3)');
+    const dueBg    = od ? 'var(--danger-soft)' : (ymdVN(t.deadline) === todayVN() ? 'var(--warn-soft)' : 'var(--bg-soft)');
+    return (
+      <button
+        onClick={() => onOpenTask && onOpenTask(t.id)}
+        className="w-full text-left card px-2.5 py-2 mb-2 hover:shadow-card-hover transition-all"
+        style={od ? { borderLeft: '3px solid var(--danger)' } : {}}
+      >
+        <div className="flex items-start gap-2">
+          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background: st.color }} />
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-medium truncate"
+              style={{ color: done ? 'var(--muted)' : 'var(--ink)', textDecoration: done ? 'line-through' : 'none' }}>
+              {t.title}
+            </div>
+            <div className="flex items-center flex-wrap gap-1.5 mt-1">
+              <span className="pill" style={{ background: 'var(--bg-soft)', color: st.color, fontSize: 10 }}>{st.l}</span>
+              {t.priority === 'high' && (
+                <span className="pill" style={{ background: 'var(--danger-soft)', color: 'var(--danger)', fontSize: 10 }}>Cao</span>
+              )}
+              {t.deadline && (
+                <span className="pill font-mono" style={{ background: dueBg, color: dueColor, fontSize: 10 }}>
+                  {od ? 'Trễ ' : ''}{fmtDate(t.deadline)}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </button>
+    );
+  }
+
+  function KanbanColumn({ col }) {
+    const [showDone, setShowDone] = useState(false);
+    return (
+      <div className="flex-shrink-0 w-[260px] rounded-xl flex flex-col"
+        style={{ background: 'var(--bg-soft)', border: '1px solid var(--line)', maxHeight: '70vh' }}>
+        {/* Column header — nhân viên */}
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b" style={{ borderColor: 'var(--line)' }}>
+          <div className="rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0"
+            style={{ width: 28, height: 28, background: col.avatar_color || '#E8F1EC', color: '#333', border: '2px solid #fff' }}>
+            {avatarInitials(col.name)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-semibold text-ink truncate">{col.name}</div>
+            {col.position && <div className="text-[10px] text-muted-ink truncate">{col.position}</div>}
+          </div>
+          <span className="pill font-mono" style={{
+            background: col.pending.length > 0 ? 'var(--warn-soft)' : 'var(--accent-soft)',
+            color: col.pending.length > 0 ? 'var(--warn)' : 'var(--accent)', fontSize: 11,
+          }}>
+            {col.pending.length} chờ
+          </span>
+        </div>
+        {/* Cards */}
+        <div className="flex-1 overflow-y-auto p-2">
+          {col.pending.length === 0 ? (
+            <div className="text-center py-6 text-[11px] text-muted-ink">✓ Không còn việc tồn</div>
+          ) : (
+            col.pending.map(t => <KanbanCard key={t.id} t={t} />)
+          )}
+          {col.done.length > 0 && (
+            <>
+              <button onClick={() => setShowDone(v => !v)}
+                className="w-full text-left text-[11px] font-mono text-muted-ink px-1 py-1.5 hover:text-ink transition-colors">
+                {showDone ? '▾' : '▸'} {col.done.length} đã xong
+              </button>
+              {showDone && col.done.map(t => <KanbanCard key={t.id} t={t} />)}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function GroupHeader({ label, sub, tone, count }) {
     const toneColor = tone === 'danger' ? 'var(--danger)'
                     : tone === 'warn' ? 'var(--warn)'
@@ -241,6 +374,7 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
           { id: 'all', l: 'Tất cả' },
           { id: 'active', l: 'Đang / Chưa làm' },
           { id: 'done', l: 'Đã xong' },
+          { id: 'assigned', l: 'Đã giao (Kanban)' },
         ].map(f => (
           <button
             key={f.id}
@@ -257,8 +391,25 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
         ))}
       </div>
 
-      {/* Groups */}
-      {filtered.length === 0 ? (
+      {/* Kanban "Đã giao" — gom theo từng nhân viên */}
+      {filter === 'assigned' ? (
+        assignedBoard.totalPeople === 0 ? (
+          <div className="card p-12 text-center">
+            <div className="text-3xl mb-2">📋</div>
+            <div className="text-sm text-ink-3">Bạn chưa giao task nào cho nhân viên khác</div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-xs text-ink-3 mb-3">
+              Theo dõi việc <b className="text-ink">đã giao</b> cho từng nhân viên nhưng <b style={{ color: 'var(--warn)' }}>chưa hoàn thành</b> — tránh giao trùng.
+              {' '}<span className="font-mono">{assignedBoard.totalPending} việc đang chờ</span> · {assignedBoard.totalPeople} nhân viên.
+            </p>
+            <div className="flex gap-3 overflow-x-auto pb-3" style={{ scrollbarWidth: 'thin' }}>
+              {assignedBoard.cols.map(col => <KanbanColumn key={col.id} col={col} />)}
+            </div>
+          </div>
+        )
+      ) : filtered.length === 0 ? (
         <div className="card p-12 text-center">
           <div className="text-3xl mb-2">🎉</div>
           <div className="text-sm text-ink-3">Không có task nào trong mục này</div>

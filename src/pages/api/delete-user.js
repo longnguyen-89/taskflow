@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Xoá vĩnh viễn 1 user (auth + profile + mọi liên kết).
-// CHỈ TGĐ mới được phép gọi — kiểm tra role ở server side.
+// Quyền: TGĐ, hoặc Quản lý (admin) khi bật quyền `admin_manage_users` — kiểm tra ở server side.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -15,11 +15,19 @@ export default async function handler(req, res) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  // Xác thực requester là TGĐ
+  // Xác thực quyền: TGĐ, hoặc Quản lý (admin) có quyền quản lý tài khoản
   const { data: requester, error: reqErr } = await supabaseAdmin
     .from('profiles').select('role').eq('id', requesterId).single();
   if (reqErr || !requester) return res.status(403).json({ error: 'Không tìm thấy người gọi' });
-  if (requester.role !== 'director') return res.status(403).json({ error: 'Chỉ TGĐ mới được xoá user' });
+
+  let allowed = requester.role === 'director';
+  if (!allowed && requester.role === 'admin') {
+    const { data: perm } = await supabaseAdmin
+      .from('app_settings').select('value').eq('key', 'permissions').maybeSingle();
+    const v = perm?.value ? (typeof perm.value === 'string' ? JSON.parse(perm.value) : perm.value) : {};
+    allowed = !!v.admin_manage_users;
+  }
+  if (!allowed) return res.status(403).json({ error: 'Không có quyền xoá tài khoản' });
 
   // Dọn các bảng trung gian (ignore errors nếu bảng không có rows)
   const cleanups = [

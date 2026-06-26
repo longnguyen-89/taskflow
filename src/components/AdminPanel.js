@@ -33,7 +33,7 @@ const MENU = [
 
 export default function AdminPanel({ members, department, onRefresh, dynamicBranches, onBranchesChanged }) {
   const [section, setSection] = useState('users');
-  const { createUser, user: currentAuthUser, profile: currentProfile, isDirector, resetPassword } = useAuth();
+  const { createUser, user: currentAuthUser, profile: currentProfile, isDirector, canManageUsers, resetPassword } = useAuth();
 
   return (
     <div className="animate-fade-in">
@@ -64,7 +64,7 @@ export default function AdminPanel({ members, department, onRefresh, dynamicBran
         })}
       </div>
 
-      {section === 'users' && <UsersSection members={members} department={department} createUser={createUser} onRefresh={onRefresh} isDirector={isDirector} currentUserId={currentAuthUser?.id} currentUserName={currentProfile?.name} resetPassword={resetPassword} />}
+      {section === 'users' && <UsersSection members={members} department={department} createUser={createUser} onRefresh={onRefresh} isDirector={isDirector} canManageUsers={canManageUsers} currentUserId={currentAuthUser?.id} currentUserName={currentProfile?.name} resetPassword={resetPassword} />}
       {section === 'branches' && <BranchesSection onBranchesChanged={onBranchesChanged} />}
       {section === 'permissions' && <PermissionsSection />}
       {section === 'groups' && <GroupsSection department={department} onRefresh={onRefresh} />}
@@ -80,7 +80,7 @@ export default function AdminPanel({ members, department, onRefresh, dynamicBran
   );
 }
 
-function UsersSection({ members, department, createUser, onRefresh, isDirector, currentUserId, currentUserName, resetPassword }) {
+function UsersSection({ members, department, createUser, onRefresh, isDirector, canManageUsers, currentUserId, currentUserName, resetPassword }) {
   const [resetPwUserId, setResetPwUserId] = useState(null);
   const [resetPwValue, setResetPwValue] = useState('');
   const [resetPwLoading, setResetPwLoading] = useState(false);
@@ -97,8 +97,33 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
     setResetPwUserId(null); setResetPwValue('');
   }
 
+  async function handleSetActive(m, active) {
+    if (!canManageUsers) return;
+    if (m.id === currentUserId) { toast('Không thể tự đổi trạng thái chính mình', 'error'); return; }
+    if (!active) {
+      const ok = typeof window !== 'undefined' && window.confirm(
+        `Cho tài khoản này NGỪNG HOẠT ĐỘNG?\n\n${m.name} (${m.email})\n\n• Người này sẽ KHÔNG đăng nhập được nữa.\n• Tài khoản chuyển vào danh sách "Ngừng hoạt động".\n• Lịch sử task / đề xuất vẫn được giữ nguyên.\n• Có thể kích hoạt lại bất cứ lúc nào.`
+      );
+      if (!ok) return;
+    }
+    try {
+      const res = await fetch('/api/set-user-active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: m.id, requesterId: currentUserId, active }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast('Lỗi: ' + data.error, 'error'); return; }
+      logActivity({ userId: currentUserId, userName: currentUserName, action: active ? ACTIONS.USER_REACTIVATED : ACTIONS.USER_DEACTIVATED, targetType: 'user', targetId: m.id, targetTitle: m.name, details: { email: m.email }, department: m.department });
+      toast(active ? `Đã kích hoạt lại ${m.name}` : `Đã cho ${m.name} ngừng hoạt động`, 'success');
+      onRefresh && onRefresh();
+    } catch (e) {
+      toast('Lỗi mạng: ' + e.message, 'error');
+    }
+  }
+
   async function handleDeleteUser(m) {
-    if (!isDirector) return;
+    if (!canManageUsers) return;
     if (m.id === currentUserId) { toast('Không thể tự xoá chính mình', 'error'); return; }
     const ok = typeof window !== 'undefined' && window.confirm(
       `⚠ XOÁ VĨNH VIỄN tài khoản này?\n\n${m.name} (${m.email})\n\nSẽ xoá: tài khoản đăng nhập, phân quyền, liên kết task/đề xuất, bình luận. KHÔNG thể khôi phục.\n\nLưu ý: nếu user này đã tạo nhiều task/đề xuất, cần xoá các task/đề xuất đó TRƯỚC, nếu không sẽ lỗi khoá ngoại.`
@@ -131,6 +156,7 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
   const [userBranches, setUserBranches] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active'); // 'active' | 'inactive'
 
   function reset() { setName(''); setEmail(''); setPassword(''); setRole('member'); setPosition('Kỹ thuật viên'); setUserDept(department); setUserBranches([]); setShowForm(false); setEditId(null); }
 
@@ -174,7 +200,11 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
   }
   const getInitials = n => n?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
-  const filtered = filter === 'all' ? members : members.filter(m => m.department === filter);
+  const isActive = m => m.active !== false; // null/undefined coi như đang hoạt động
+  const deptFiltered = filter === 'all' ? members : members.filter(m => m.department === filter);
+  const activeCount = deptFiltered.filter(isActive).length;
+  const inactiveCount = deptFiltered.length - activeCount;
+  const filtered = deptFiltered.filter(m => statusFilter === 'active' ? isActive(m) : !isActive(m));
 
   return (
     <div>
@@ -188,6 +218,20 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
           ))}
         </div>
         {!showForm && <button onClick={() => { reset(); setShowForm(true); }} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white" style={{ background: '#123524' }}>+ Tạo tài khoản</button>}
+      </div>
+
+      {/* Status toggle: đang hoạt động / ngừng hoạt động */}
+      <div className="flex gap-2 mb-4">
+        {[
+          { id: 'active', l: 'Đang hoạt động', n: activeCount },
+          { id: 'inactive', l: 'Ngừng hoạt động', n: inactiveCount },
+        ].map(s => (
+          <button key={s.id} onClick={() => setStatusFilter(s.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${statusFilter === s.id ? 'bg-white shadow-sm border border-gray-200' : 'text-gray-500'}`}
+            style={statusFilter === s.id && s.id === 'inactive' ? { color: '#b45309' } : {}}>
+            {s.l} ({s.n})
+          </button>
+        ))}
       </div>
 
       {showForm && (
@@ -263,11 +307,15 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
       <div className="space-y-2">
         {filtered.map(m => {
           const rc = ROLES.find(r => r.v === m.role) || ROLES[3];
+          const active = isActive(m);
           return (
-            <div key={m.id} className="card p-3.5 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ background: m.avatar_color, color: '#333' }}>{getInitials(m.name)}</div>
+            <div key={m.id} className="card p-3.5 flex items-center gap-3" style={!active ? { opacity: 0.6, background: '#fafafa' } : {}}>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ background: m.avatar_color, color: '#333', filter: active ? 'none' : 'grayscale(1)' }}>{getInitials(m.name)}</div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{m.name}</p>
+                <p className="text-sm font-semibold truncate flex items-center gap-1.5">
+                  {m.name}
+                  {!active && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-200 text-gray-600 flex-shrink-0">Ngừng hoạt động</span>}
+                </p>
                 <p className="text-[10px] text-gray-400 truncate">{m.email}</p>
               </div>
               <span className="px-2 py-0.5 rounded text-[10px] font-semibold" style={{ background: rc.c + '15', color: rc.c }}>{rc.l}</span>
@@ -284,14 +332,30 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                 </button>
               )}
-              {isDirector && m.id !== currentUserId && (
-                <button onClick={() => handleDeleteUser(m)} className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600" title="Xoá vĩnh viễn (chỉ TGĐ)">
+              {canManageUsers && m.id !== currentUserId && (
+                active ? (
+                  <button onClick={() => handleSetActive(m, false)} className="p-1 rounded hover:bg-amber-50 text-amber-500 hover:text-amber-700" title="Cho ngừng hoạt động">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </button>
+                ) : (
+                  <button onClick={() => handleSetActive(m, true)} className="p-1 rounded hover:bg-emerald-50 text-emerald-500 hover:text-emerald-700" title="Kích hoạt lại">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </button>
+                )
+              )}
+              {canManageUsers && m.id !== currentUserId && (
+                <button onClick={() => handleDeleteUser(m)} className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600" title="Xoá vĩnh viễn">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
                 </button>
               )}
             </div>
           );
         })}
+        {filtered.length === 0 && (
+          <p className="text-sm text-gray-400 text-center py-8">
+            {statusFilter === 'inactive' ? 'Không có tài khoản nào ngừng hoạt động' : 'Không có tài khoản nào'}
+          </p>
+        )}
       </div>
 
       {/* Reset password modal */}

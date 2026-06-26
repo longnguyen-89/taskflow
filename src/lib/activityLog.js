@@ -42,6 +42,8 @@ export const ACTIONS = {
   PROPOSAL_WATCHER_REMOVED: 'proposal_watcher_removed',
   USER_CREATED: 'user_created',
   USER_DELETED: 'user_deleted',
+  USER_DEACTIVATED: 'user_deactivated',
+  USER_REACTIVATED: 'user_reactivated',
   PASSWORD_RESET: 'password_reset',
   COMMENT_ADDED: 'comment_added',
 };
@@ -68,6 +70,8 @@ export const ACTION_LABELS = {
   proposal_watcher_removed: 'Bỏ người theo dõi đề xuất',
   user_created: 'Tạo tài khoản',
   user_deleted: 'Xóa tài khoản',
+  user_deactivated: 'Ngừng hoạt động tài khoản',
+  user_reactivated: 'Kích hoạt lại tài khoản',
   password_reset: 'Reset mật khẩu',
   comment_added: 'Bình luận',
 };
@@ -93,6 +97,8 @@ export const ACTION_ICONS = {
   proposal_watcher_removed: '🙈',
   user_created: '👤',
   user_deleted: '🚫',
+  user_deactivated: '⏸',
+  user_reactivated: '▶️',
   password_reset: '🔑',
   comment_added: '💬',
 };

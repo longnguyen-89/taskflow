@@ -324,3 +324,40 @@ profiles, tasks, task_assignees, task_watchers, task_files, task_groups, task_ch
   - **CSS variables**: dung --accent, --warn, --danger, --ink, --ink2, --muted, --bg-soft, --line, --card-bg, --gradeBg (a/b/c/d), --gradeColor (a/b/c/d).
 - **Build**: `next build` sach. Dashboard bundle 61.6 kB (khong doi — Performance.js chunk rieng).
 - **Files**: 1 modified (`src/components/Performance.js` +266/-102 dong).
+
+### 2026-06-26 — Feature: View "Đã giao (Kanban)" theo từng nhân viên trong Task của tôi
+- **Yeu cau user** (ghi chu tren anh): "trong phan task da giao, nen chia ra theo dang Kanban theo tung nhan vien, de theo doi cac cv nao da giao nhung chua thuc hien/chua hoan thanh de tranh giao trung".
+- **Thay doi** `src/components/MyTasks.js`:
+  - Them filter thu 4 "Da giao (Kanban)" canh "Tat ca / Dang-Chua lam / Da xong".
+  - `assignedBoard` useMemo: loc task goc do TOI giao (`created_by === userId`, co assignees, khong tinh task tu giao cho minh), gom theo nguoi duoc giao. Moi cot 1 nhan vien voi `pending[]` (todo/doing/waiting) + `done[]`. Sort task trong cot theo status (doing>waiting>todo) roi deadline. Sort cot theo so viec chua xong giam dan (de thay ai qua tai).
+  - `KanbanCard`: title + status dot + pill trang thai/priority/deadline (highlight tre han border do). Click -> `onOpenTask`.
+  - `KanbanColumn`: header avatar + ten + position + badge "N cho"; list card chua xong; nut collapse "N da xong" (mac dinh an). Khung cuon ngang, maxHeight 70vh.
+- **Khong can migration** — chi doc du lieu tasks/assignees hien co, khong sua DB.
+- **Build**: `next build` sach. Dashboard bundle 75 kB.
+- **Files**: 1 modified (`src/components/MyTasks.js`).
+- **DEPLOYED**: dpl_AzrSYahrmFTDD7Dcnd9sDxXgoM4u. Production https://cce-tasks.vercel.app.
+
+### 2026-06-26 (p.m.) — Feature: Admin duoc xoa user + Tai khoan ngung hoat dong (cho NV nghi)
+- **Yeu cau user**: "chinh lai cho admin duoc quyen duoc xoa va cho tai khoan ngung hoat dong. tai khoan nay se vao danh sach ngung hoat dong, vi co 1 so ban nghi".
+- **DB**: migration `supabase-migration-2026-06-26.sql` — `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true` + UPDATE NULL->true. Da apply (`add_profiles_active_2026_06_26`) tren Supabase taskflow (dvoagdhbbppqpofzlkju). 12 user deu active.
+- **Soft-deactivate thay vi xoa** cho NV nghi: giu nguyen lich su task/de xuat (khong dut khoa ngoai), chan dang nhap.
+- **API moi** `src/pages/api/set-user-active.js`: verify quyen (director, hoac admin khi bat `admin_manage_users`) -> update `profiles.active` + ban/unban auth user (`ban_duration` '876000h'/'none'). POST { userId, requesterId, active }.
+- **API sua** `delete-user.js`: doi tu chi-director sang director HOAC admin-co-quyen (doc app_settings permissions.admin_manage_users server-side).
+- **AuthContext**: `fetchProfile` — neu `profile.active === false` thi signOut + alert ngay (defense-in-depth khi bi vo hieu hoa luc dang dang nhap).
+- **AdminPanel UsersSection**: them prop `canManageUsers`. Gate nut Xoa + nut Ngung/Kich hoat theo `canManageUsers` (thay vi `isDirector`). Them toggle "Dang hoat dong (N) / Ngung hoat dong (N)", loc list theo trang thai. Row inactive: dim + badge "Ngung hoat dong". Nut pause (amber) / play (green) goi `handleSetActive`. Log activity user_deactivated/user_reactivated.
+- **activityLog.js**: them ACTIONS USER_DEACTIVATED/USER_REACTIVATED + labels + icons.
+- **Loai NV nghi khoi picker giao viec**: `dashboard.js` (CreateTask members), `RecurringTasks.js` (deptMembers), `TaskList.js` (mentionablesFor) deu them `m.active !== false`. Tranh giao task moi cho nguoi da nghi.
+- **Build**: `next build` sach. Dashboard 75.8 kB, them route /api/set-user-active.
+- **Files**: 2 new (migration, set-user-active.js), 6 modified (activityLog.js, delete-user.js, AuthContext.js, AdminPanel.js, dashboard.js, RecurringTasks.js, TaskList.js).
+- **DEPLOYED**: dpl_5ouDHuvfy7RVg1LmFARcumPm64De. Production https://cce-tasks.vercel.app.
+- **Safety**: migration idempotent default true (khong anh huong 12 user). Soft-deactivate khong xoa data. Xoa vinh vien van canh bao + chan tu xoa minh.
+
+### 2026-06-26 (late) — Bugfix: Click card trong "Task của tôi" khong mo duoc chi tiet cv lien quan
+- **Yeu cau user** (ghi chu tren anh, tab "Đã giao (Kanban)"): "khi bam vao noi dung nay, thi k link duoc den cong viec lien quan" — bam vao card task khong mo duoc task chi tiet.
+- **Root cause**: `MyTasks.js` (ca `Row` lan `KanbanCard`) goi `onOpenTask(t.id)`. Trong `dashboard.js`, `MyTasks` duoc noi `onOpenTask={openTaskById}` (handler "legacy"). `openTaskById` chi `setFocusTaskId(...)` + chuyen `tab='dashboard'`, KHONG mo modal. Ma `focusTaskId` chi duoc doc trong `TaskList.js` (effect expand+scroll). Sau redesign Executive Dashboard (2026-04-22), tab Tong quan view "list" render focus list moi — `TaskList` KHONG con duoc mount, va `focusTaskId` khong con duoc truyen xuong component nao. => `openTaskById` set 1 state khong ai doc → bam card chi nhay sang Tong quan roi khong mo gi ca. (Loi anh huong ca List Row lan Kanban Card cua "Task cua toi".)
+- **Fix**: doi `onOpenTask={openTaskById}` → `onOpenTask={openTaskDetail}` (dashboard.js dong ~1084). `openTaskDetail` fetch full task (resolve `parent_id` cho sub-task), switch dept/branch co guard quyen, `setDetailTask` → mo thang `<TaskDetailModal>`. Dung dung pattern voi focus list (dong 964), search (1097), notification (135). Sua comment stale dau `MyTasks.js`.
+- **Verify (ultracode workflow, 3 lens doc lap + synthesis)**: dieu confirm root cause; khong co regression cho case "Đã giao" (task minh tao giao nguoi khac, khac chi nhanh) — RLS cho SELECT, switch dept/branch co guard, sub-task parent OK, du prop cho TaskDetailModal; `KanbanBoard` (Kanban Tong quan) co modal rieng, khong bi anh huong.
+- **Dead code (de lai, optional cleanup sau)**: sau fix, `openTaskById` (dashboard.js ~111-129) + state `focusTaskId` (dong 44) thanh dead; effect `focusTaskId` trong `TaskList.js` (~378-399) dormant vi TaskList khong con mount. Giu nguyen theo nguyen tac thay doi toi thieu tren production; co the xoa khi can.
+- **Build**: `next build` sach. Dashboard 75.8 kB (khong doi).
+- **Files**: 2 modified (`src/pages/dashboard.js` 1 dong, `src/components/MyTasks.js` 1 comment).
+- **CHUA DEPLOY** — cho user xac nhan truoc khi deploy len Vercel.
