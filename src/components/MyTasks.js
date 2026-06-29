@@ -38,8 +38,14 @@ function fmtRange(startD, endD) {
   return `${fmtDate(startD + 'T12:00:00Z')} → ${fmtDate(endD + 'T12:00:00Z')}`;
 }
 
-export default function MyTasks({ tasks, members, userId, onOpenTask, profileName }) {
+export default function MyTasks({ tasks, members, userId, onOpenTask, profileName, assignedTasks, assignerIds, showAssigner }) {
   const [filter, setFilter] = useState('all');
+  // Nguồn dữ liệu cho board "Đã giao": mặc định là task của tôi; với TGĐ là việc do mọi giám đốc giao.
+  const boardSource = assignedTasks && assignedTasks.length ? assignedTasks : (tasks || []);
+  const assignerSet = useMemo(
+    () => new Set(assignerIds && assignerIds.length ? assignerIds : [userId]),
+    [assignerIds, userId]
+  );
 
   const mine = useMemo(() => {
     return (tasks || []).filter(t =>
@@ -102,11 +108,11 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
   // "Đã giao" — Kanban theo từng nhân viên: task tôi giao cho người khác, gom theo người được giao.
   // Mục đích: theo dõi cv nào đã giao nhưng chưa thực hiện/chưa hoàn thành -> tránh giao trùng.
   const assignedBoard = useMemo(() => {
-    // Chỉ lấy task gốc do TÔI giao, có người được giao (không tính task tự giao cho chính mình).
-    const assigned = (tasks || []).filter(t =>
+    // Task gốc do (các) giám đốc giao, có người được giao. assignerSet = {mình} hoặc {tất cả giám đốc}.
+    const assigned = (boardSource || []).filter(t =>
       t.approval_status !== 'pending' &&
       !t.parent_id &&
-      t.created_by === userId &&
+      assignerSet.has(t.created_by) &&
       (t.assignees?.length > 0)
     );
 
@@ -116,7 +122,7 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
     for (const t of assigned) {
       for (const a of (t.assignees || [])) {
         const uid = a.user_id;
-        if (uid === userId) continue; // bỏ task tự giao cho mình
+        if (assignerSet.has(uid)) continue; // bỏ cột là giám đốc (board chỉ hiện nhân viên)
         if (!byId.has(uid)) {
           const m = members?.find(mm => mm.id === uid);
           byId.set(uid, {
@@ -147,7 +153,7 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
     const totalPending = cols.reduce((s, c) => s + c.pending.length, 0);
     const totalDone = cols.reduce((s, c) => s + c.done.length, 0);
     return { cols, totalPending, totalDone, totalPeople: cols.length };
-  }, [tasks, members, userId]);
+  }, [boardSource, members, assignerSet]);
 
   function relation(t) {
     const isAssignee = t.assignees?.some(a => a.user_id === userId);
@@ -265,6 +271,12 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
               {t.deadline && (
                 <span className="pill font-mono" style={{ background: dueBg, color: dueColor, fontSize: 10 }}>
                   {od ? 'Trễ ' : ''}{fmtDate(t.deadline)}
+                </span>
+              )}
+              {showAssigner && t.creator?.name && (
+                <span className="pill" style={{ background: 'var(--violet-soft, #EEEDFE)', color: 'var(--violet, #6D5BD0)', fontSize: 10 }}
+                  title={'Giao bởi ' + t.creator.name}>
+                  {t.creator.id === userId ? 'Tôi giao' : t.creator.name}
                 </span>
               )}
             </div>
@@ -396,12 +408,14 @@ export default function MyTasks({ tasks, members, userId, onOpenTask, profileNam
         assignedBoard.totalPeople === 0 ? (
           <div className="card p-12 text-center">
             <div className="text-3xl mb-2">📋</div>
-            <div className="text-sm text-ink-3">Bạn chưa giao task nào cho nhân viên khác</div>
+            <div className="text-sm text-ink-3">
+              {showAssigner ? 'Chưa có việc nào được giám đốc giao cho nhân viên' : 'Bạn chưa giao task nào cho nhân viên khác'}
+            </div>
           </div>
         ) : (
           <div>
             <p className="text-xs text-ink-3 mb-3">
-              Theo dõi việc <b className="text-ink">đã giao</b> cho từng nhân viên nhưng <b style={{ color: 'var(--warn)' }}>chưa hoàn thành</b> — tránh giao trùng.
+              Theo dõi việc <b className="text-ink">{showAssigner ? 'cả hai giám đốc đã giao' : 'đã giao'}</b> cho từng nhân viên nhưng <b style={{ color: 'var(--warn)' }}>chưa hoàn thành</b> — tránh giao trùng.
               {' '}<span className="font-mono">{assignedBoard.totalPending} việc đang chờ</span> · {assignedBoard.totalPeople} nhân viên.
             </p>
             <div className="flex gap-3 overflow-x-auto pb-3" style={{ scrollbarWidth: 'thin' }}>

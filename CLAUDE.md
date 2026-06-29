@@ -360,4 +360,24 @@ profiles, tasks, task_assignees, task_watchers, task_files, task_groups, task_ch
 - **Dead code (de lai, optional cleanup sau)**: sau fix, `openTaskById` (dashboard.js ~111-129) + state `focusTaskId` (dong 44) thanh dead; effect `focusTaskId` trong `TaskList.js` (~378-399) dormant vi TaskList khong con mount. Giu nguyen theo nguyen tac thay doi toi thieu tren production; co the xoa khi can.
 - **Build**: `next build` sach. Dashboard 75.8 kB (khong doi).
 - **Files**: 2 modified (`src/pages/dashboard.js` 1 dong, `src/components/MyTasks.js` 1 comment).
-- **CHUA DEPLOY** — cho user xac nhan truoc khi deploy len Vercel.
+- **DEPLOYED**: commit `e66f73d` (kem theo feature admin-delete/deactivate cua session truoc — truoc do deploy nhung chua commit, nay da commit chung). Deployment `dpl_DjC73Kkp3kfFwcShR5J1LpacUtMs`. Production https://cce-tasks.vercel.app (build 16s, dashboard 75.8 kB).
+
+### 2026-06-29 — Feature: Tim kiem theo ten nhan vien + TGD thay viec cua nhau
+- **Yeu cau user** (ghi chu tren anh o tab Tim kiem): (1) "Phan tim kiem nay cho tim ten nhan vien de thay cac cong viec ma ban do dang duoc nhan". (2) "Tai khoan cua Truc va cua toi duoc nhin thay cac cong viec cua nhau da giao cho nhan vien." User chon them: gop board "Da giao (Kanban)" cho ca 2 giam doc; deploy ngay.
+- **Boi canh data** (doc tu Supabase, read-only): Long Nguyen (wyckoffvsa6868@gmail.com) va Truc Nguyen (trucnguyen.vn2303@gmail.com) DEU la `director`, dept `nail`, branches null. RLS tasks/task_assignees: policy SELECT `qual=true` (mo hoan toan) → moi visibility do client-side filter quyet dinh, KHONG can migration.
+- **Feature 1 — Tim kiem theo ten nhan vien** (`src/components/SearchModal.js`, viet lai):
+  - `normalize()` bo dau tieng Viet (NFD + strip combining marks + d/D) → tim khong phan biet dau ("truc"→"Trúc", "lien"→"Liên").
+  - Section "Nhan vien": gom nguoi duoc giao tu assignees cua pool, loc theo ten khop query, hien so "X viec dang mo / Y tong", sort theo so viec mo giam dan. Click 1 nguoi → loc sang "Viec da giao cho {ten}" (chip co nut bo loc), hien moi task cua ho, viec chua xong len truoc (tranh giao trung).
+  - Task results: khop them theo ten assignee + ten creator; moi row hien avatar stack + ten nguoi duoc giao.
+  - Dieu huong ban phim hop nhat (nguoi truoc, task sau). ESC khi dang loc 1 nguoi → bo loc; ESC lan nua → dong.
+- **Feature 2 — Visibility cheo giua 2 giam doc** (`src/pages/dashboard.js`):
+  - Them state `searchPool`: list task da loc theo QUYEN (role/chi nhanh phu trach) NHUNG KHONG loc theo chi nhanh dang chon o thanh tren. Refactor block filter trong `fetchData` thanh `pool` (quyen) → `tasks` (view = pool + loc chi nhanh dang chon). Da verify tuong duong logic cu cho moi role (director/admin/accountant/member, co/khong chon chi nhanh).
+  - SearchModal nhan `searchPool` thay vi `tasks` → TGD luon tim thay MOI viec giao cho 1 nhan vien o moi chi nhanh, ke ca khi dang xem 1 chi nhanh; Truc/Long thay viec cua nhau (vi ca 2 deu doc het task nail).
+- **Feature 3 — Board "Da giao (Kanban)" gop 2 giam doc** (`src/pages/dashboard.js` + `src/components/MyTasks.js`):
+  - `fetchData`: neu viewer la director, tinh `boardAssignerIds` = id moi director; fetch `byDirectors` (task created_by IN directorIds, dept hien tai) → `assignedPool`. Role khac: assignerIds=[self], pool=myTasksRaw (giu nguyen).
+  - MyTasks them props `assignedTasks`, `assignerIds`, `showAssigner`. `assignedBoard` dung `boardSource` + `assignerSet`: lay task created_by ∈ assignerSet; bo cot la giam doc (chi hien nhan vien). KanbanCard hien pill "Toi giao"/"{ten giam doc}" khi showAssigner. Copy doi sang "ca hai giam doc da giao". Mac dinh (1 assigner) = hanh vi cu y het.
+- **Khong can migration** — thuan client-side, chi doc du lieu.
+- **Build**: `next build` sach. Dashboard 77.1 kB (tu 75.8 kB).
+- **Files**: 3 modified (`SearchModal.js` viet lai, `MyTasks.js`, `dashboard.js`).
+- **DEPLOYED**: Deployment `dpl_62oUZGsFD6vUoXtALgTD8fQZrfE3` (READY). Production https://cce-tasks.vercel.app (alias updated, build 31s).
+- **Bao mat (luu y user)**: git remote `origin` dang nhung GitHub PAT plaintext trong URL — nen rotate token + dung credential helper.

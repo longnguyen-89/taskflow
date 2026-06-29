@@ -26,6 +26,15 @@ export default function Dashboard() {
   const [dept, setDept] = useState('nail');
   const [branch, setBranch] = useState(null);
   const [tasks, setTasks] = useState([]);
+  // searchPool: danh sách task cho ô Tìm kiếm — đã lọc theo QUYỀN (role/chi nhánh được phụ trách)
+  // nhưng KHÔNG lọc theo chi nhánh đang chọn ở thanh trên. Nhờ vậy TGĐ luôn tìm thấy mọi
+  // việc đã giao cho 1 nhân viên (kể cả khi đang xem 1 chi nhánh cụ thể), và Trúc/Long thấy
+  // được việc của nhau đã giao cho nhân viên.
+  const [searchPool, setSearchPool] = useState([]);
+  // Board "Đã giao (Kanban)" trong Task của tôi. Với TGĐ, gộp việc do TẤT CẢ giám đốc giao
+  // (vd Trúc + Long) để hai người cùng tránh giao trùng. Với role khác: chỉ việc mình giao.
+  const [assignedPool, setAssignedPool] = useState([]);
+  const [assignerIds, setAssignerIds] = useState([]);
   const [members, setMembers] = useState([]);
   const [taskGroups, setTaskGroups] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -218,30 +227,32 @@ export default function Dashboard() {
 
     const { data: allTasks } = await taskQuery;
 
-    let filtered = allTasks || [];
+    const allRows = allTasks || [];
 
     const involvesMe = (t) =>
       t.assignees?.some(a => a.user_id === user.id) ||
       t.watchers?.some(w => w.user_id === user.id) ||
       t.created_by === user.id;
 
-    if (dept === 'nail') {
-      if (branch) {
-        filtered = filtered.filter(t => t.branch === branch || involvesMe(t));
-      } else if (!canViewAll) {
-        const allowed = Array.isArray(profile?.branches) ? profile.branches : [];
-        if (allowed.length > 0) {
-          filtered = filtered.filter(t => (t.branch && allowed.includes(t.branch)) || involvesMe(t));
-        }
+    // ── Pool theo QUYỀN (không phụ thuộc chi nhánh đang chọn) ──
+    // TGĐ/Kế toán: thấy mọi task trong phòng ban. Quản lý: chỉ chi nhánh phụ trách (+ việc liên quan).
+    // Nhân viên: chỉ việc của mình. Đây là phạm vi dùng cho ô Tìm kiếm.
+    let pool = allRows;
+    if (dept === 'nail' && !canViewAll) {
+      const allowed = Array.isArray(profile?.branches) ? profile.branches : [];
+      if (allowed.length > 0) {
+        pool = pool.filter(t => (t.branch && allowed.includes(t.branch)) || involvesMe(t));
       }
     }
-
     if (!isDirector && !isAccountant && profile?.role === 'member') {
-      filtered = filtered.filter(t =>
-        t.assignees?.some(a => a.user_id === user.id) ||
-        t.watchers?.some(w => w.user_id === user.id) ||
-        t.created_by === user.id
-      );
+      pool = pool.filter(involvesMe);
+    }
+    setSearchPool(pool);
+
+    // ── View hiện tại: thu hẹp pool theo chi nhánh đang chọn (chỉ là tuỳ chọn xem, không phải quyền) ──
+    let filtered = pool;
+    if (dept === 'nail' && branch) {
+      filtered = filtered.filter(t => t.branch === branch || involvesMe(t));
     }
     setTasks(filtered);
 
@@ -300,6 +311,25 @@ export default function Dashboard() {
     const seen = new Set(myTasksRaw.map(t => t.id));
     for (const t of byCreator || []) if (!seen.has(t.id)) { myTasksRaw.push(t); seen.add(t.id); }
     setMyAllTasks(myTasksRaw);
+
+    // ── Board "Đã giao": TGĐ thấy việc do TẤT CẢ giám đốc giao (Trúc + Long) trong phòng ban ──
+    let boardAssignerIds = [user.id];
+    let boardPool = myTasksRaw; // mặc định (role khác director): chỉ việc mình giao đã có trong myTasksRaw
+    if (isDirector) {
+      const directorIds = (allMembers || []).filter(m => m.role === 'director').map(m => m.id);
+      if (directorIds.length > 0) boardAssignerIds = directorIds;
+      // Có giám đốc khác ngoài mình -> fetch việc do mọi giám đốc giao trong phòng ban hiện tại.
+      if (boardAssignerIds.some(id => id !== user.id)) {
+        const { data: byDirectors } = await supabase.from('tasks').select(`
+          *, creator:profiles!tasks_created_by_fkey(id, name, avatar_color, position),
+          assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(id, name, avatar_color, position)),
+          watchers:task_watchers(user_id, user:profiles!task_watchers_user_id_fkey(id, name, avatar_color))
+        `).in('created_by', boardAssignerIds).eq('department', dept).order('created_at', { ascending: false });
+        if (byDirectors) boardPool = byDirectors;
+      }
+    }
+    setAssignerIds(boardAssignerIds);
+    setAssignedPool(boardPool);
 
     setLoading(false);
   }, [user, profile, dept, branch, isDirector, isAccountant, canViewAll]);
@@ -1081,7 +1111,7 @@ export default function Dashboard() {
               {tab === 'create' && canCreateTask && <CreateTask members={members.filter(m => m.active !== false && (m.department === dept || m.role === 'accountant' || m.role === 'director'))} userId={user.id} userName={profile.name} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} taskGroups={taskGroups} onCreated={() => { fetchData(); setTab('dashboard'); }} />}
               {tab === 'proposals' && <Proposals userId={user.id} userName={profile.name} members={members} department={dept} branch={branch} allowedBranches={allowedBranches} canViewAll={canViewAll} profile={profile} isDirector={isDirector} isAccountant={isAccountant} canApprove={canApprove} canApproveProposal={canApproveProposal} canDeleteProposal={canDeleteProposal} focusProposalId={focusProposalId} clearFocus={() => setFocusProposalId(null)} />}
               {tab === 'performance' && canViewReports && <Performance tasks={tasks} members={members} department={dept} userId={user.id} profile={profile} isAdmin={isDirector || isAccountant} isDirector={isDirector} />}
-              {tab === 'mytasks' && <MyTasks tasks={myAllTasks} members={members} userId={user.id} onOpenTask={openTaskDetail} profileName={profile.name} />}
+              {tab === 'mytasks' && <MyTasks tasks={myAllTasks} assignedTasks={assignedPool} assignerIds={assignerIds.length ? assignerIds : [user.id]} showAssigner={assignerIds.length > 1} members={members} userId={user.id} onOpenTask={openTaskDetail} profileName={profile.name} />}
               {tab === 'notifications' && <Notifications notifications={notifications} userId={user.id} onRefresh={fetchData} onOpen={handleOpenNotification} />}
               {tab === 'admin' && (isDirector || canManageUsers) && (
                 <ErrorBoundary>
@@ -1094,7 +1124,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {showSearch && <SearchModal tasks={tasks} onClose={() => setShowSearch(false)} onSelect={(t) => { setShowSearch(false); openTaskDetail(t.id); }} />}
+      {showSearch && <SearchModal tasks={searchPool} members={members} currentUserId={user.id} onClose={() => setShowSearch(false)} onSelect={(t) => { setShowSearch(false); openTaskDetail(t.id); }} />}
 
       {/* Task detail modal — mở từ click notification, focus list, etc. */}
       <TaskDetailModal
