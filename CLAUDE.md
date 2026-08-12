@@ -381,3 +381,24 @@ profiles, tasks, task_assignees, task_watchers, task_files, task_groups, task_ch
 - **Files**: 3 modified (`SearchModal.js` viet lai, `MyTasks.js`, `dashboard.js`).
 - **DEPLOYED**: Deployment `dpl_62oUZGsFD6vUoXtALgTD8fQZrfE3` (READY). Production https://cce-tasks.vercel.app (alias updated, build 31s).
 - **Bao mat (luu y user)**: git remote `origin` dang nhung GitHub PAT plaintext trong URL — nen rotate token + dung credential helper.
+
+### 2026-08-12 — Feature: Sua duoc bang chi tiet mat hang trong De xuat
+- **Yeu cau user** (kem anh khoi "Dang sua de xuat"): "phan nhap lieu so luong, hay dieu chinh lai cho nguoi dung duoc quyen sua lai so luong va cac thong tin". User chon: sua DAY DU (gia tri + them/xoa dong + file), va khi tong chi tiet lech o Chi phi thi CANH BAO + nut lay tong (khong tu dong ghi de).
+- **Van de**: form "Dang sua de xuat" truoc day chi cho sua tieu de / phan loai / mo ta / chi phi. Bang chi tiet mat hang khoa cung — dong luu y ghi "de sua items/file, xoa va tao lai de xuat". Sua 1 con so luong sai phai xoa ca de xuat lam lai (mat luon comment + lich su duyet).
+- **Thay doi** `src/components/Proposals.js` (1 file duy nhat, +237/-19):
+  - State moi `editItems` + `uploadingEditItemIdx`, tach hoan toan khoi `items` cua form tao moi (2 luong khong de len nhau).
+  - `startEditProposal` nap `p.items` vao form (so → chuoi hien thi); de xuat chua co mat hang thi mo san 1 dong trong de them.
+  - Bang chi tiet SUA DUOC trong khoi edit: desktop grid 8 cot + mobile card, y het bang luc tao moi — ten, DVT, so luong, don gia, ghi chu, tong gia auto-calc, them/xoa dong, dinh kem + xoa file tung dong, dong Tong cong.
+  - Canh bao do khi o "Chi phi" lech tong bang chi tiet + nut "Lay tong chi tiet" (nguoi dung tu bam, khong tu dong ghi de).
+  - `saveProposalEdit` ghi `items` xuong DB + log activity tom tat `{count, total}` truoc/sau; giu nguyen notify + push cho nguoi duyet & theo doi.
+  - An bang readonly khi dang sua chinh de xuat do (tranh 2 bang chong nhau).
+  - Gop code trung: `cleanItemList`, `uploadItemFilesTo`, `removeItemFileFrom` dung chung cho ca form tao moi lan form sua.
+- **Bay so hoc da xu ly**: `parseNum` coi dau CHAM la phan cach nghin, nen so luong `2.5` luu trong DB neu do thang vao o input se bi doc lai thanh `25` — sai 10 lan, khong ném loi. Them `numToInput` / `priceToInput` doi ve dau PHAY thap phan. Da chay 17 case round-trip DB → input → DB (SL 2,5 / 50.000; gia 45.000 / 1.234.567 / 45.000,5): tat ca PASS.
+- **Quyen giu nguyen**: `canEditProposal` khong doi — chi TGD / admin / nguoi tao, va chi khi de xuat con `pending`/`partial`. Da duyet hoac tu choi van khoa.
+- **Khong can migration** — cot `items` JSONB da co san tu 2026-04-16.
+- **Build**: `next build` sach. Dashboard 77.4 kB (tu 77.1 kB).
+- **Files**: 1 modified (`src/components/Proposals.js`).
+- **Git**: commit `b23e01f` (rebase len `e5d4f59` cua phien truoc — remote khong dung `Proposals.js` nen sach).
+- **DEPLOYED**: Deployment `dpl_RLUFTCbee4Z1iU6AZ6ZLEBnt2cPP` (READY, target production). Alias https://cce-tasks.vercel.app da tro ve deployment nay (HTTP 200, buildId `f-QQQVl1cKLm26p4wZEVb`).
+- **Chua test end-to-end tren UI** — can tai khoan dang nhap. Da verify: build sach + logic so round-trip + deployment READY + alias dung.
+- **Bao mat (nhac lai)**: git remote `origin` VAN nhung GitHub PAT plaintext trong URL. Nen rotate token o GitHub roi dung credential helper / SSH.
