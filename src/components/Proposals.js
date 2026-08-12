@@ -186,6 +186,10 @@ export default function Proposals({ userId, userName, members, department, branc
   // editForm chua snapshot tam thoi cua field dang sua; khi luu thi viet vao DB va clear.
   const [editingProposalId, setEditingProposalId] = useState(null);
   const [editForm, setEditForm] = useState({ title: '', desc: '', cost: '', catId: '', branch: '' });
+  // Bang chi tiet mat hang khi SUA de xuat. Tach hoan toan khoi `items` cua form tao moi
+  // de 2 luong khong de len nhau. Nap tu p.items luc bam Sua, ghi lai vao DB luc Luu.
+  const [editItems, setEditItems] = useState([]);
+  const [uploadingEditItemIdx, setUploadingEditItemIdx] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
   // pickerOpen luu pid+kind ('approver' | 'watcher') de mo dropdown chi 1 cho cung luc.
   const [pickerOpen, setPickerOpen] = useState(null);
@@ -303,6 +307,12 @@ export default function Proposals({ userId, userName, members, department, branc
   function updateItem(idx, field, value) {
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   }
+  // Cung 3 thao tac tren, nhung cho bang chi tiet dang SUA.
+  function addEditItem() { setEditItems(prev => [...prev, { ...EMPTY_ITEM, files: [] }]); }
+  function removeEditItem(idx) { setEditItems(prev => prev.filter((_, i) => i !== idx)); }
+  function updateEditItem(idx, field, value) {
+    setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  }
   // Parse number từ chuỗi "1.234.567" hoặc "1234567" hoặc "1,5" → number.
   function parseNum(v) {
     if (v === null || v === undefined || v === '') return 0;
@@ -310,15 +320,43 @@ export default function Proposals({ userId, userName, members, department, branc
     const n = parseFloat(s);
     return Number.isFinite(n) ? n : 0;
   }
+  // Nguoc lai parseNum: number da luu trong DB → chuoi cho o input.
+  // Dung dau PHAY lam dau thap phan, vi parseNum coi dau CHAM la phan cach nghin
+  // (2.5 ma de nguyen se bi doc thanh 25).
+  function numToInput(v) {
+    if (v === null || v === undefined || v === '' || Number(v) === 0) return '';
+    return String(v).replace('.', ',');
+  }
+  // Don gia hien thi dang 1.234.567 (nhu luc nhap moi); so le thap phan thi giu dau phay.
+  function priceToInput(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n === 0) return '';
+    return Number.isInteger(n) ? formatVND(String(n)) : numToInput(n);
+  }
   function itemTotal(it) { return parseNum(it.quantity) * parseNum(it.unit_price); }
   function itemsGrandTotal(list) { return (list || []).reduce((s, it) => s + itemTotal(it), 0); }
+  // Lam sach truoc khi ghi DB: chi giu dong co ten mat hang, parse so tu chuoi format VND.
+  // Dung chung cho ca luc tao moi va luc sua.
+  function cleanItemList(list) {
+    return (list || [])
+      .filter(it => it.name && it.name.trim())
+      .map(it => ({
+        name: it.name.trim(),
+        unit: (it.unit || '').trim(),
+        quantity: parseNum(it.quantity),
+        unit_price: parseNum(it.unit_price),
+        note: (it.note || '').trim(),
+        files: Array.isArray(it.files) ? it.files : [],
+      }));
+  }
 
   // Upload nhiều file cho 1 dòng item. Lưu URL vào item.files.
-  async function handleItemFileUpload(itemIdx, e) {
+  // setList/setUploadingIdx duoc truyen vao de dung chung cho bang tao moi va bang dang sua.
+  async function uploadItemFilesTo(setList, setUploadingIdx, itemIdx, e) {
     const chosen = Array.from(e.target.files || []);
     e.target.value = '';
     if (chosen.length === 0) return;
-    setUploadingItemIdx(itemIdx);
+    setUploadingIdx(itemIdx);
     const newFiles = [];
     for (const f of chosen) {
       const safeName = f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
@@ -329,18 +367,22 @@ export default function Proposals({ userId, userName, members, department, branc
       newFiles.push({ name: f.name, url: publicUrl, type: f.type, size: f.size });
     }
     if (newFiles.length > 0) {
-      setItems(prev => prev.map((it, i) => i === itemIdx
+      setList(prev => prev.map((it, i) => i === itemIdx
         ? { ...it, files: [...(it.files || []), ...newFiles] }
         : it));
       toast(`Đã đính kèm ${newFiles.length} file cho dòng #${itemIdx + 1}`, 'success');
     }
-    setUploadingItemIdx(null);
+    setUploadingIdx(null);
   }
-  function removeItemFile(itemIdx, fileIdx) {
-    setItems(prev => prev.map((it, i) => i === itemIdx
+  function removeItemFileFrom(setList, itemIdx, fileIdx) {
+    setList(prev => prev.map((it, i) => i === itemIdx
       ? { ...it, files: (it.files || []).filter((_, fi) => fi !== fileIdx) }
       : it));
   }
+  function handleItemFileUpload(itemIdx, e) { return uploadItemFilesTo(setItems, setUploadingItemIdx, itemIdx, e); }
+  function removeItemFile(itemIdx, fileIdx) { removeItemFileFrom(setItems, itemIdx, fileIdx); }
+  function handleEditItemFileUpload(itemIdx, e) { return uploadItemFilesTo(setEditItems, setUploadingEditItemIdx, itemIdx, e); }
+  function removeEditItemFile(itemIdx, fileIdx) { removeItemFileFrom(setEditItems, itemIdx, fileIdx); }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -354,16 +396,7 @@ export default function Proposals({ userId, userName, members, department, branc
     const catName = catId ? (categories.find(c => c.id === catId)?.name || tabLabel) : tabLabel;
     const costRaw = parseVND(costDisplay);
     // Làm sạch items: chỉ giữ dòng có tên mặt hàng, parse số từ chuỗi format VND.
-    const cleanItems = items
-      .filter(it => it.name && it.name.trim())
-      .map(it => ({
-        name: it.name.trim(),
-        unit: (it.unit || '').trim(),
-        quantity: parseNum(it.quantity),
-        unit_price: parseNum(it.unit_price),
-        note: (it.note || '').trim(),
-        files: Array.isArray(it.files) ? it.files : [],
-      }));
+    const cleanItems = cleanItemList(items);
     const { data: p, error } = await supabase.from('proposals').insert({
       title: title.trim(), description: desc.trim(), category_id: catId || null,
       category_name: catName, estimated_cost: costRaw ? parseInt(costRaw) : null,
@@ -448,12 +481,28 @@ export default function Proposals({ userId, userName, members, department, branc
       catId: p.category_id || '',
       branch: p.branch || '',
     });
+    // Nap bang chi tiet hien co vao form sua (so → chuoi hien thi).
+    // De xuat chua co mat hang nao thi mo san 1 dong trong de nguoi dung them.
+    const srcItems = Array.isArray(p.items) ? p.items : [];
+    setEditItems(srcItems.length > 0
+      ? srcItems.map(it => ({
+          name: it.name || '',
+          unit: it.unit || '',
+          quantity: numToInput(it.quantity),
+          unit_price: priceToInput(it.unit_price),
+          note: it.note || '',
+          files: Array.isArray(it.files) ? it.files : [],
+        }))
+      : [{ ...EMPTY_ITEM, files: [] }]);
+    setUploadingEditItemIdx(null);
     setPickerOpen(null);
   }
 
   function cancelEditProposal() {
     setEditingProposalId(null);
     setEditForm({ title: '', desc: '', cost: '', catId: '', branch: '' });
+    setEditItems([]);
+    setUploadingEditItemIdx(null);
   }
 
   async function saveProposalEdit(p) {
@@ -465,6 +514,8 @@ export default function Proposals({ userId, userName, members, department, branc
     const catName = editForm.catId
       ? (categories.find(c => c.id === editForm.catId)?.name || p.category_name || tabLabel)
       : (p.category_name || tabLabel);
+    const oldItems = Array.isArray(p.items) ? p.items : [];
+    const newItems = cleanItemList(editItems);
     const updates = {
       title: newTitle,
       description: (editForm.desc || '').trim(),
@@ -472,6 +523,7 @@ export default function Proposals({ userId, userName, members, department, branc
       category_id: editForm.catId || null,
       category_name: catName,
       branch: department === 'nail' ? (editForm.branch || null) : null,
+      items: newItems,
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('proposals').update(updates).eq('id', p.id);
@@ -483,6 +535,13 @@ export default function Proposals({ userId, userName, members, department, branc
     if ((p.estimated_cost || null) !== updates.estimated_cost) changed.cost = { from: p.estimated_cost, to: updates.estimated_cost };
     if ((p.category_id || null) !== updates.category_id) changed.category = { from: p.category_name, to: updates.category_name };
     if ((p.branch || null) !== updates.branch) changed.branch = { from: p.branch, to: updates.branch };
+    // Chi tiet mat hang: log tom tat (so dong + tong tien), khong dump ca mang cho nhe log.
+    if (JSON.stringify(oldItems) !== JSON.stringify(newItems)) {
+      changed.items = {
+        from: { count: oldItems.length, total: itemsGrandTotal(oldItems) },
+        to: { count: newItems.length, total: itemsGrandTotal(newItems) },
+      };
+    }
     if (Object.keys(changed).length > 0) {
       logActivity({
         userId, userName,
@@ -1113,6 +1172,165 @@ export default function Proposals({ userId, userName, members, department, branc
                           onChange={e => setEditForm(f => ({ ...f, cost: formatVND(e.target.value) }))}
                           placeholder="VD: 1.000.000" />
                       </div>
+
+                      {/* Canh bao khi o Chi phi lech voi tong bang chi tiet */}
+                      {(() => {
+                        const detailTotal = itemsGrandTotal(editItems);
+                        const costNum = parseNum(parseVND(editForm.cost || ''));
+                        if (detailTotal <= 0 || costNum === detailTotal) return null;
+                        return (
+                          <div className="flex flex-wrap items-center gap-2 px-2.5 py-2 rounded-lg" style={{ background: '#fff', border: '1px solid var(--danger)' }}>
+                            <span className="text-[10px] leading-snug flex-1 min-w-[180px]" style={{ color: 'var(--danger)' }}>
+                              Chi phí đang ghi <strong>{costNum.toLocaleString('de-DE')}đ</strong>, lệch với tổng bảng chi tiết <strong>{detailTotal.toLocaleString('de-DE')}đ</strong>.
+                            </span>
+                            <button type="button" onClick={() => setEditForm(f => ({ ...f, cost: formatVND(String(Math.round(detailTotal))) }))}
+                              className="px-2 py-1 rounded-lg text-[10px] font-semibold text-white flex-shrink-0"
+                              style={{ background: 'var(--accent)' }}>
+                              Lấy tổng chi tiết
+                            </button>
+                          </div>
+                        );
+                      })()}
+
+                      {/* =============== CHI TIẾT MẶT HÀNG (sửa được) =============== */}
+                      <div>
+                        <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: 'var(--muted)' }}>
+                          Chi tiết mặt hàng <span className="normal-case font-normal">(sửa số lượng, đơn giá, thêm / xoá dòng)</span>
+                        </label>
+
+                        {/* Desktop: table layout */}
+                        <div className="hidden md:block rounded-xl overflow-hidden" style={{ background: '#fff', border: '1px solid var(--line)' }}>
+                          <div className="grid grid-cols-[32px_minmax(140px,2fr)_70px_80px_120px_120px_minmax(120px,1.5fr)_32px] gap-1.5 px-2 py-1.5 text-[9px] font-semibold uppercase tracking-wide" style={{ background: 'var(--bg-soft)', borderBottom: '1px solid var(--line)', color: 'var(--muted)' }}>
+                            <div className="text-center">#</div>
+                            <div>Tên mặt hàng</div>
+                            <div>ĐVT</div>
+                            <div className="text-right">Số lượng</div>
+                            <div className="text-right">Đơn giá</div>
+                            <div className="text-right">Tổng giá</div>
+                            <div>Ghi chú</div>
+                            <div></div>
+                          </div>
+                          {editItems.map((it, idx) => {
+                            const itFiles = Array.isArray(it.files) ? it.files : [];
+                            return (
+                            <div key={idx} style={{ borderBottom: '1px solid var(--line-2)' }}>
+                              <div className="grid grid-cols-[32px_minmax(140px,2fr)_70px_80px_120px_120px_minmax(120px,1.5fr)_32px] gap-1.5 px-2 py-1.5 items-center">
+                                <div className="text-center text-[11px] font-mono font-semibold" style={{ color: 'var(--muted)' }}>{idx + 1}</div>
+                                <input className="input-field !text-xs !py-1.5" placeholder="VD: Khăn tắm" value={it.name} onChange={e => updateEditItem(idx, 'name', e.target.value)} />
+                                <input className="input-field !text-xs !py-1.5" placeholder="cái" value={it.unit} onChange={e => updateEditItem(idx, 'unit', e.target.value)} />
+                                <input className="input-field !text-xs !py-1.5 text-right font-mono" inputMode="decimal" placeholder="0" value={it.quantity} onChange={e => updateEditItem(idx, 'quantity', e.target.value)} />
+                                <input className="input-field !text-xs !py-1.5 text-right font-mono" inputMode="numeric" placeholder="0" value={it.unit_price} onChange={e => updateEditItem(idx, 'unit_price', formatVND(e.target.value))} />
+                                <div className="px-2 py-1.5 rounded-lg text-xs text-right font-semibold font-mono truncate" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} title={itemTotal(it).toLocaleString('de-DE') + 'đ'}>
+                                  {itemTotal(it) > 0 ? itemTotal(it).toLocaleString('de-DE') + 'đ' : '—'}
+                                </div>
+                                <input className="input-field !text-xs !py-1.5" placeholder="Ghi chú..." value={it.note} onChange={e => updateEditItem(idx, 'note', e.target.value)} />
+                                <button type="button" onClick={() => removeEditItem(idx)} disabled={editItems.length <= 1}
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                  style={{ color: 'var(--danger)' }}
+                                  title="Xóa dòng">
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                                </button>
+                              </div>
+                              {/* File đính kèm theo từng dòng */}
+                              <div className="px-2 pb-2 pl-[44px] flex flex-wrap items-center gap-1.5">
+                                {itFiles.map((f, fi) => (
+                                  <a key={fi} href={f.url} target="_blank" rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="group inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] max-w-[200px]"
+                                    style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                                    <span className="flex-shrink-0">{getFileIcon(f.name)}</span>
+                                    <span className="truncate" title={f.name}>{f.name}</span>
+                                    <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeEditItemFile(idx, fi); }}
+                                      className="flex-shrink-0 ml-0.5" style={{ color: 'var(--danger)' }} title="Xóa file">
+                                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                  </a>
+                                ))}
+                                <label className={`inline-flex items-center gap-1 px-2 py-1 rounded-md cursor-pointer text-[10px] transition-colors ${uploadingEditItemIdx === idx ? 'opacity-50 pointer-events-none' : ''}`} style={{ border: '1px dashed var(--line)', background: '#fff', color: 'var(--muted)' }}>
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                                  {uploadingEditItemIdx === idx ? 'Đang tải...' : (itFiles.length > 0 ? 'Thêm file' : 'Đính kèm file')}
+                                  <input type="file" multiple className="hidden" onChange={(e) => handleEditItemFileUpload(idx, e)} />
+                                </label>
+                              </div>
+                            </div>
+                            );
+                          })}
+                          {editItems.some(it => it.name && it.name.trim()) && (
+                            <div className="grid grid-cols-[32px_minmax(140px,2fr)_70px_80px_120px_120px_minmax(120px,1.5fr)_32px] gap-1.5 px-2 py-2 text-xs font-bold" style={{ background: 'var(--accent-soft)', borderTop: '2px solid var(--accent)' }}>
+                              <div></div>
+                              <div className="col-span-4 text-right" style={{ color: 'var(--ink-2)' }}>Tổng cộng:</div>
+                              <div className="text-right font-mono" style={{ color: 'var(--accent)' }}>{itemsGrandTotal(editItems).toLocaleString('de-DE')}đ</div>
+                              <div></div>
+                              <div></div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Mobile: stack card layout */}
+                        <div className="md:hidden space-y-2">
+                          {editItems.map((it, idx) => {
+                            const itFiles = Array.isArray(it.files) ? it.files : [];
+                            return (
+                            <div key={idx} className="rounded-xl p-2.5" style={{ background: '#fff', border: '1px solid var(--line)' }}>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-[10px] font-bold uppercase" style={{ color: 'var(--muted)' }}>Dòng #{idx + 1}</span>
+                                <button type="button" onClick={() => removeEditItem(idx)} disabled={editItems.length <= 1}
+                                  className="disabled:opacity-20 disabled:cursor-not-allowed" style={{ color: 'var(--danger)' }} title="Xóa dòng">
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                                </button>
+                              </div>
+                              <div className="space-y-1.5">
+                                <input className="input-field !text-xs !py-1.5" placeholder="Tên mặt hàng *" value={it.name} onChange={e => updateEditItem(idx, 'name', e.target.value)} />
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <input className="input-field !text-xs !py-1.5" placeholder="ĐVT (cái, chai...)" value={it.unit} onChange={e => updateEditItem(idx, 'unit', e.target.value)} />
+                                  <input className="input-field !text-xs !py-1.5 text-right" inputMode="decimal" placeholder="Số lượng" value={it.quantity} onChange={e => updateEditItem(idx, 'quantity', e.target.value)} />
+                                </div>
+                                <input className="input-field !text-xs !py-1.5 text-right" inputMode="numeric" placeholder="Đơn giá" value={it.unit_price} onChange={e => updateEditItem(idx, 'unit_price', formatVND(e.target.value))} />
+                                <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs" style={{ background: 'var(--accent-soft)' }}>
+                                  <span style={{ color: 'var(--muted)' }}>Tổng giá:</span>
+                                  <span className="font-semibold font-mono" style={{ color: 'var(--accent)' }}>{itemTotal(it) > 0 ? itemTotal(it).toLocaleString('de-DE') + 'đ' : '—'}</span>
+                                </div>
+                                <input className="input-field !text-xs !py-1.5" placeholder="Ghi chú..." value={it.note} onChange={e => updateEditItem(idx, 'note', e.target.value)} />
+                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                  {itFiles.map((f, fi) => (
+                                    <a key={fi} href={f.url} target="_blank" rel="noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] max-w-[180px]"
+                                      style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                                      <span className="flex-shrink-0">{getFileIcon(f.name)}</span>
+                                      <span className="truncate" title={f.name}>{f.name}</span>
+                                      <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeEditItemFile(idx, fi); }}
+                                        className="flex-shrink-0 ml-0.5" style={{ color: 'var(--danger)' }}>
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                      </button>
+                                    </a>
+                                  ))}
+                                  <label className={`inline-flex items-center gap-1 px-2 py-1 rounded-md cursor-pointer text-[10px] ${uploadingEditItemIdx === idx ? 'opacity-50 pointer-events-none' : ''}`} style={{ border: '1px dashed var(--line)', background: '#fff', color: 'var(--muted)' }}>
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                                    {uploadingEditItemIdx === idx ? 'Đang tải...' : (itFiles.length > 0 ? 'Thêm file' : 'Đính kèm file')}
+                                    <input type="file" multiple className="hidden" onChange={(e) => handleEditItemFileUpload(idx, e)} />
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+                            );
+                          })}
+                          {editItems.some(it => it.name && it.name.trim()) && (
+                            <div className="flex items-center justify-between px-3 py-2 rounded-xl" style={{ background: 'var(--accent-soft)', border: '2px solid var(--accent)' }}>
+                              <span className="text-xs font-bold" style={{ color: 'var(--ink-2)' }}>Tổng cộng:</span>
+                              <span className="text-sm font-bold font-mono" style={{ color: 'var(--accent)' }}>{itemsGrandTotal(editItems).toLocaleString('de-DE')}đ</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <button type="button" onClick={addEditItem}
+                          className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors"
+                          style={{ background: '#fff', border: '1px solid var(--line)', color: 'var(--accent)' }}>
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                          Thêm dòng mới
+                        </button>
+                      </div>
+
                       <div className="flex gap-2">
                         <button onClick={() => saveProposalEdit(p)} disabled={savingEdit}
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
@@ -1126,7 +1344,7 @@ export default function Proposals({ userId, userName, members, department, branc
                         </button>
                       </div>
                       <p className="text-[10px] italic" style={{ color: 'var(--muted)' }}>
-                        Lưu ý: chi tiết mặt hàng và file đính kèm sẽ giữ nguyên. Để sửa items/file, xoá và tạo lại đề xuất.
+                        Lưu ý: dòng chi tiết bỏ trống tên mặt hàng sẽ không được lưu. File đính kèm chung của đề xuất giữ nguyên.
                       </p>
                     </div>
                   ) : (
@@ -1136,8 +1354,8 @@ export default function Proposals({ userId, userName, members, department, branc
                     </>
                   )}
 
-                  {/* Chi tiết mặt hàng (readonly) — chỉ hiện nếu có items */}
-                  {Array.isArray(p.items) && p.items.length > 0 && (
+                  {/* Chi tiết mặt hàng (readonly) — chỉ hiện nếu có items và KHÔNG đang sửa (tránh 2 bảng chồng nhau) */}
+                  {editingProposalId !== p.id && Array.isArray(p.items) && p.items.length > 0 && (
                     <div className="mb-3">
                       <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Chi tiết ({p.items.length} mặt hàng)</p>
                       {/* Desktop table */}
