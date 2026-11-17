@@ -1,12 +1,14 @@
 // Xoá task/đề xuất qua API server-side (bypass RLS bằng service_role).
-// Verify role='director' ở server để đảm bảo an toàn.
+// Verify role='director' ở server theo access token (apiFetch gắn Bearer).
+// Tham số thứ 2 (requesterId) cũ của nơi gọi được bỏ qua — server không còn tin nó.
+import { apiFetch } from '@/lib/apiFetch';
 
-export async function deleteTaskCascade(taskId, requesterId) {
+export async function deleteTaskCascade(taskId) {
   try {
-    const res = await fetch('/api/delete-task', {
+    const res = await apiFetch('/api/delete-task', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ taskId, requesterId }),
+      body: JSON.stringify({ taskId }),
     });
     const data = await res.json();
     if (!res.ok) return { error: { message: data.error || 'Lỗi không xác định' } };
@@ -16,12 +18,12 @@ export async function deleteTaskCascade(taskId, requesterId) {
   }
 }
 
-export async function deleteProposalCascade(proposalId, requesterId) {
+export async function deleteProposalCascade(proposalId) {
   try {
-    const res = await fetch('/api/delete-proposal', {
+    const res = await apiFetch('/api/delete-proposal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ proposalId, requesterId }),
+      body: JSON.stringify({ proposalId }),
     });
     const data = await res.json();
     if (!res.ok) return { error: { message: data.error || 'Lỗi không xác định' } };

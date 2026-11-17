@@ -1,13 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireStaff } from '@/lib/apiAuth';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const { email, password, name, role, position, department, branches, requesterId } = req.body;
-
-  if (!email || !password || !name) {
-    return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
-  }
 
   // Use service role key to create user without affecting current session
   const supabaseAdmin = createClient(
@@ -16,12 +11,15 @@ export default async function handler(req, res) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  // Auth check: chỉ director mới được tạo user
-  if (!requesterId) return res.status(403).json({ error: 'Thiếu requesterId' });
-  const { data: requester, error: reqErr } = await supabaseAdmin
-    .from('profiles').select('role').eq('id', requesterId).single();
-  if (reqErr || !requester) return res.status(403).json({ error: 'Không tìm thấy người gọi' });
+  // Auth check: chỉ director mới được tạo user — người gọi lấy từ access token
+  const requester = await requireStaff(req, res, supabaseAdmin);
+  if (!requester) return;
   if (requester.role !== 'director') return res.status(403).json({ error: 'Chỉ Tổng Giám đốc mới được tạo tài khoản' });
+
+  const { email, password, name, role, position, department, branches } = req.body || {};
+  if (!email || !password || !name) {
+    return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
+  }
 
   // Create auth user
   const { data, error } = await supabaseAdmin.auth.admin.createUser({

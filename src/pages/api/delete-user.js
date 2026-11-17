@@ -1,13 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireStaff } from '@/lib/apiAuth';
 
 // Xoá vĩnh viễn 1 user (auth + profile + mọi liên kết).
 // Quyền: TGĐ, hoặc Quản lý (admin) khi bật quyền `admin_manage_users` — kiểm tra ở server side.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const { userId, requesterId } = req.body;
-  if (!userId || !requesterId) return res.status(400).json({ error: 'Thiếu userId / requesterId' });
-  if (userId === requesterId) return res.status(400).json({ error: 'Không thể tự xoá chính mình' });
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -15,11 +12,15 @@ export default async function handler(req, res) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  // Xác thực quyền: TGĐ, hoặc Quản lý (admin) có quyền quản lý tài khoản
-  const { data: requester, error: reqErr } = await supabaseAdmin
-    .from('profiles').select('role').eq('id', requesterId).single();
-  if (reqErr || !requester) return res.status(403).json({ error: 'Không tìm thấy người gọi' });
+  // Xác thực người gọi bằng access token (không tin requesterId trong body)
+  const requester = await requireStaff(req, res, supabaseAdmin);
+  if (!requester) return;
 
+  const { userId } = req.body || {};
+  if (!userId) return res.status(400).json({ error: 'Thiếu userId' });
+  if (userId === requester.id) return res.status(400).json({ error: 'Không thể tự xoá chính mình' });
+
+  // Quyền: TGĐ, hoặc Quản lý (admin) có quyền quản lý tài khoản
   let allowed = requester.role === 'director';
   if (!allowed && requester.role === 'admin') {
     const { data: perm } = await supabaseAdmin

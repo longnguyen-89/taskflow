@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/Toaster';
 import { useAuth } from '@/contexts/AuthContext';
 import { NAIL_BRANCHES, branchLabel } from '@/lib/branches';
@@ -107,10 +108,10 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
       if (!ok) return;
     }
     try {
-      const res = await fetch('/api/set-user-active', {
+      const res = await apiFetch('/api/set-user-active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: m.id, requesterId: currentUserId, active }),
+        body: JSON.stringify({ userId: m.id, active }),
       });
       const data = await res.json();
       if (!res.ok) { toast('Lỗi: ' + data.error, 'error'); return; }
@@ -130,10 +131,10 @@ function UsersSection({ members, department, createUser, onRefresh, isDirector, 
     );
     if (!ok) return;
     try {
-      const res = await fetch('/api/delete-user', {
+      const res = await apiFetch('/api/delete-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: m.id, requesterId: currentUserId }),
+        body: JSON.stringify({ userId: m.id }),
       });
       const data = await res.json();
       if (!res.ok) { toast('Lỗi: ' + data.error, 'error'); return; }
@@ -696,7 +697,7 @@ function ReportsSection({ department, isDirector, currentUserId }) {
     if (!window.confirm(`Gửi báo cáo ${reportPeriod === 'month' ? 'tháng' : 'tuần'} ngay cho tất cả Tổng Giám đốc? (in-app + push + email/Telegram nếu có)`)) return;
     setCeoReportSending(true);
     try {
-      const res = await fetch(`/api/send-ceo-report?period=${reportPeriod}&requesterId=${currentUserId}`, { method: 'POST' });
+      const res = await apiFetch(`/api/send-ceo-report?period=${reportPeriod}`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) { toast('Lỗi: ' + (data.error || 'Không gửi được'), 'error'); return; }
       const count = (data.notifyResults || []).length;
@@ -714,7 +715,7 @@ function ReportsSection({ department, isDirector, currentUserId }) {
     if (!currentUserId) return;
     setTelegramChecking(true);
     try {
-      const res = await fetch(`/api/telegram-check?requesterId=${currentUserId}`);
+      const res = await apiFetch('/api/telegram-check');
       const data = await res.json();
       setTelegramInfo(data);
       if (!data.configured) toast('Bot Telegram chưa cấu hình. Xem hướng dẫn trong panel.', 'error');

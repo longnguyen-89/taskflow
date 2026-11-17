@@ -1,12 +1,11 @@
-// Helper to send push notification via API
+import { apiFetch } from '@/lib/apiFetch';
+
+// Helper to send push notification via API (xác thực bằng access token của người đang đăng nhập)
 export async function sendPush(userId, title, body, extra = {}) {
   try {
-    await fetch('/api/send-push', {
+    await apiFetch('/api/send-push', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.NEXT_PUBLIC_CRON_SECRET || '',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, title, body, ...extra }),
     });
   } catch (e) {

@@ -1,5 +1,6 @@
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
+import { isCronRequest } from '@/lib/apiAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -36,9 +37,9 @@ async function sendPushToUser(userId, title, body) {
 }
 
 export default async function handler(req, res) {
-  // Auth check
-  const apiKey = req.headers['x-api-key'] || req.query.key;
-  if (apiKey !== process.env.CRON_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  // Auth: CRON_SECRET qua Bearer (Vercel Cron tự gửi), x-api-key hoặc ?key=.
+  // Trước đây không nhận Bearer, và CRON_SECRET chưa đặt + không gửi khoá thì lọt qua.
+  if (!isCronRequest(req)) return res.status(401).json({ error: 'Unauthorized' });
 
   const now = new Date();
   const results = { reminders20h: 0, reminders1h: 0, weeklyReports: 0 };

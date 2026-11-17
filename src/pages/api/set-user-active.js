@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireStaff } from '@/lib/apiAuth';
 
 // Cho 1 tài khoản NGỪNG HOẠT ĐỘNG (active=false) hoặc KÍCH HOẠT LẠI (active=true).
 // Khác delete-user: KHÔNG xoá dữ liệu — chỉ đổi trạng thái + chặn/mở đăng nhập (ban auth user).
@@ -6,22 +7,22 @@ import { createClient } from '@supabase/supabase-js';
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { userId, requesterId, active } = req.body;
-  if (!userId || !requesterId || typeof active !== 'boolean')
-    return res.status(400).json({ error: 'Thiếu userId / requesterId / active' });
-  if (userId === requesterId) return res.status(400).json({ error: 'Không thể tự đổi trạng thái chính mình' });
-
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  // Xác thực quyền của requester (TGĐ, hoặc Quản lý có quyền quản lý tài khoản)
-  const { data: requester, error: reqErr } = await supabaseAdmin
-    .from('profiles').select('role').eq('id', requesterId).single();
-  if (reqErr || !requester) return res.status(403).json({ error: 'Không tìm thấy người gọi' });
+  // Xác thực người gọi bằng access token (không tin requesterId trong body)
+  const requester = await requireStaff(req, res, supabaseAdmin);
+  if (!requester) return;
 
+  const { userId, active } = req.body || {};
+  if (!userId || typeof active !== 'boolean')
+    return res.status(400).json({ error: 'Thiếu userId / active' });
+  if (userId === requester.id) return res.status(400).json({ error: 'Không thể tự đổi trạng thái chính mình' });
+
+  // Quyền: TGĐ, hoặc Quản lý có quyền quản lý tài khoản
   let allowed = requester.role === 'director';
   if (!allowed && requester.role === 'admin') {
     const { data: perm } = await supabaseAdmin

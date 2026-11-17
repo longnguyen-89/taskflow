@@ -1,5 +1,6 @@
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
+import { isCronRequest, requireStaff } from '@/lib/apiAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -15,12 +16,14 @@ webpush.setVapidDetails(
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // API key auth — accept both CRON_SECRET (server-side cron) and NEXT_PUBLIC_CRON_SECRET (client-side calls)
-  const apiKey = req.headers['x-api-key'];
-  const validKeys = [process.env.CRON_SECRET, process.env.NEXT_PUBLIC_CRON_SECRET].filter(Boolean);
-  if (!apiKey || !validKeys.includes(apiKey)) return res.status(401).json({ error: 'Unauthorized' });
+  // Auth: máy chủ (CRON_SECRET) hoặc nhân viên đang đăng nhập (access token).
+  // KHÔNG còn nhận NEXT_PUBLIC_CRON_SECRET — khoá đó nằm công khai trong bundle trình duyệt.
+  if (!isCronRequest(req)) {
+    const caller = await requireStaff(req, res, supabase);
+    if (!caller) return;
+  }
 
-  const { userId, title, body, url, tag } = req.body;
+  const { userId, title, body, url, tag } = req.body || {};
 
   try {
     // Get user's push subscription

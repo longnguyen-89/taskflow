@@ -3,6 +3,7 @@
 // generated for today (tracked via recurring_tasks.last_generated_date).
 
 import { createClient } from '@supabase/supabase-js';
+import { isCronRequest } from '@/lib/apiAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -20,10 +21,9 @@ function ymd(d) {
 }
 
 export default async function handler(req, res) {
-  // Allow Vercel cron OR manual call with secret (server-side only, NOT public key)
-  const auth = req.headers['x-api-key'] || req.query.key;
-  const isCron = req.headers['user-agent']?.includes('vercel-cron');
-  if (!isCron && auth !== process.env.CRON_SECRET) {
+  // Vercel Cron gửi Authorization: Bearer <CRON_SECRET>; gọi tay dùng x-api-key / ?key=.
+  // KHÔNG tin user-agent 'vercel-cron' — ai cũng tự đặt được header đó.
+  if (!isCronRequest(req)) {
     return res.status(401).json({ error: 'unauthorized' });
   }
 

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/apiFetch';
 
 const AuthContext = createContext({});
 const COLORS = ['#E6F1FB', '#E1F5EE', '#FAEEDA', '#EEEDFE', '#FAECE7', '#FBEAF0', '#EAF3DE', '#F1EFE8'];
@@ -64,10 +65,10 @@ export function AuthProvider({ children }) {
 
   async function createUser(email, password, name, role, position, department, branches) {
     try {
-      const res = await fetch('/api/create-user', {
+      const res = await apiFetch('/api/create-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, role, position, department, branches, requesterId: user?.id }),
+        body: JSON.stringify({ email, password, name, role, position, department, branches }),
       });
       const data = await res.json();
       if (!res.ok) return { error: { message: data.error } };
@@ -96,10 +97,10 @@ export function AuthProvider({ children }) {
 
   async function resetPassword(targetUserId, newPassword) {
     try {
-      const res = await fetch('/api/reset-password', {
+      const res = await apiFetch('/api/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: targetUserId, newPassword, requesterId: user?.id }),
+        body: JSON.stringify({ userId: targetUserId, newPassword }),
       });
       const data = await res.json();
       if (!res.ok) return { error: { message: data.error } };

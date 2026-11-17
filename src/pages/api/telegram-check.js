@@ -1,9 +1,10 @@
 // Helper endpoint: kiem tra bot Telegram + list cac chat ID da nhan tin bot
-// Goi: GET /api/telegram-check?requesterId=<director_id>
+// Goi: GET /api/telegram-check  (Authorization: Bearer <access_token>)
 // Yeu cau: TELEGRAM_BOT_TOKEN phai set trong Vercel env
 // Bao mat: chi director moi goi duoc (tranh lo token / chat ID ra ngoai)
 
 import { createClient } from '@supabase/supabase-js';
+import { requireStaff } from '@/lib/apiAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -11,11 +12,10 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
-  // Auth: chi director
-  const requesterId = req.query.requesterId || req.body?.requesterId;
-  if (!requesterId) return res.status(401).json({ error: 'Missing requesterId' });
-  const { data: p } = await supabase.from('profiles').select('role, name').eq('id', requesterId).single();
-  if (!p || p.role !== 'director') return res.status(403).json({ error: 'Chi TGD moi check duoc bot' });
+  // Auth: chi director — nguoi goi lay tu access token (khong tin requesterId)
+  const p = await requireStaff(req, res, supabase);
+  if (!p) return;
+  if (p.role !== 'director') return res.status(403).json({ error: 'Chi TGD moi check duoc bot' });
 
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {

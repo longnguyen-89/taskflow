@@ -1,7 +1,7 @@
 // Feature 20 — Bao cao tu dong CEO
 // GET /api/send-ceo-report?period=week — bao cao tuan (Mon 8am VN = 1am UTC)
 // GET /api/send-ceo-report?period=month — bao cao thang (day 1 8am VN)
-// Manual: POST tu admin panel (requesterId check)
+// Manual: POST tu admin panel (Authorization: Bearer <access_token>, chi director)
 //
 // Tac vu: tong hop KPI toan cong ty (ca 2 department) → notify tat ca director
 // + push web + (neu co RESEND_API_KEY thi send email)
@@ -9,6 +9,7 @@
 
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
+import { isCronRequest, requireStaff } from '@/lib/apiAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -273,20 +274,14 @@ function formatReportTelegram(periodLabel, nail, hotel) {
 
 export default async function handler(req, res) {
   // Vercel Cron mac dinh gui header `Authorization: Bearer <CRON_SECRET>` khi env var nay duoc set.
-  // Cung chap nhan `x-api-key` header hoac `?key=` query de test tu CLI.
-  const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  const apiKey = req.headers['x-api-key'] || req.query.key || bearer;
-  const isCron = !!process.env.CRON_SECRET && apiKey === process.env.CRON_SECRET;
-  const requesterId = req.query.requesterId || req.body?.requesterId;
+  // Cung chap nhan `x-api-key` header hoac `?key=` query de test tu CLI (lib/apiAuth isCronRequest).
+  // Thu cong: director, nguoi goi lay tu access token (khong tin requesterId).
   const period = (req.query.period || req.body?.period || 'week') === 'month' ? 'month' : 'week';
-
-  // Auth: either CRON_SECRET or director requester
-  let authorized = isCron;
-  if (!authorized && requesterId) {
-    const { data: p } = await supabase.from('profiles').select('role').eq('id', requesterId).single();
-    if (p && p.role === 'director') authorized = true;
+  if (!isCronRequest(req)) {
+    const p = await requireStaff(req, res, supabase);
+    if (!p) return;
+    if (p.role !== 'director') return res.status(403).json({ error: 'Chỉ Tổng Giám đốc mới được gửi báo cáo CEO' });
   }
-  if (!authorized) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
     const { start, end, prevStart, prevEnd } = getPeriodRange(period);

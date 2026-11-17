@@ -1,12 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireStaff } from '@/lib/apiAuth';
 
-// TGD reset mat khau cho nguoi khac. Verify requester la director.
+// TGD reset mat khau cho nguoi khac. Nguoi goi lay tu access token (khong tin requesterId).
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const { userId, newPassword, requesterId } = req.body;
-  if (!userId || !newPassword || !requesterId) return res.status(400).json({ error: 'Thiếu thông tin' });
-  if (newPassword.length < 6) return res.status(400).json({ error: 'Mật khẩu mới tối thiểu 6 ký tự' });
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -14,11 +11,13 @@ export default async function handler(req, res) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  // Verify requester la director
-  const { data: requester, error: reqErr } = await supabaseAdmin
-    .from('profiles').select('role').eq('id', requesterId).single();
-  if (reqErr || !requester) return res.status(403).json({ error: 'Không tìm thấy người gọi' });
+  const requester = await requireStaff(req, res, supabaseAdmin);
+  if (!requester) return;
   if (requester.role !== 'director') return res.status(403).json({ error: 'Chỉ TGĐ mới được reset mật khẩu' });
+
+  const { userId, newPassword } = req.body || {};
+  if (!userId || !newPassword) return res.status(400).json({ error: 'Thiếu thông tin' });
+  if (newPassword.length < 6) return res.status(400).json({ error: 'Mật khẩu mới tối thiểu 6 ký tự' });
 
   // Update password
   const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: newPassword });
