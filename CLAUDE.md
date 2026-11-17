@@ -72,7 +72,15 @@ profiles, tasks, task_assignees, task_watchers, task_files, task_groups, task_ch
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — client
 - `SUPABASE_SERVICE_ROLE_KEY` — server-side API routes
 - `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — push notifications
-- `CRON_SECRET` / `NEXT_PUBLIC_CRON_SECRET` — cron auth
+- `CRON_SECRET` — cron auth, CHI phia server (Vercel Cron tu gui `Authorization: Bearer <CRON_SECRET>`)
+- ~~`NEXT_PUBLIC_CRON_SECRET`~~ — bo tu 2026-11-17, code khong con doc. Bien `NEXT_PUBLIC_*` bi nhung vao bundle trinh duyet = cong khai.
+
+## Xac thuc API (tu 2026-11-17)
+- Nguoi goi API CHI lay tu access token Supabase: trinh duyet goi qua `apiFetch` (`src/lib/apiFetch.js`, tu gan `Authorization: Bearer`), server dung `requireStaff(req, res, admin)` trong `src/lib/apiAuth.js` (401 thieu/sai token, 403 khong co ho so / `active=false`).
+- KHONG gui / KHONG tin `requesterId` trong body/query — moi tai khoan doc duoc uuid nguoi khac.
+- Route cron: `isCronRequest(req)` (Bearer / `x-api-key` / `?key=` khop `CRON_SECRET`; CRON_SECRET chua dat = luon tu choi). KHONG tin User-Agent `vercel-cron`.
+- Route moi goi tu trinh duyet: dung `apiFetch` + `requireStaff`. Ngoai le: `change-password` (tu kiem mat khau cu).
+- Phep thu: `bash tests/chay-thu.sh` (chay tren ban sao, env sach, Supabase gia, chan mang); `bash tests/chay-thu.sh --dot-bien` (7 dot bien phai lam phep thu do).
 
 ## Vercel Cron
 - `/api/check-deadlines` — daily 00:00 UTC (nhac deadline + weekly report Thu 2)
@@ -402,3 +410,10 @@ profiles, tasks, task_assignees, task_watchers, task_files, task_groups, task_ch
 - **DEPLOYED**: Deployment `dpl_RLUFTCbee4Z1iU6AZ6ZLEBnt2cPP` (READY, target production). Alias https://cce-tasks.vercel.app da tro ve deployment nay (HTTP 200, buildId `f-QQQVl1cKLm26p4wZEVb`).
 - **Chua test end-to-end tren UI** — can tai khoan dang nhap. Da verify: build sach + logic so round-trip + deployment READY + alias dung.
 - **Bao mat (nhac lai)**: git remote `origin` VAN nhung GitHub PAT plaintext trong URL. Nen rotate token o GitHub roi dung credential helper / SSH.
+
+### 2026-11-17 — Bao mat: API xac thuc nguoi goi bang access token
+- **Lo**: 8 route server (`reset-password`, `create-user`, `delete-user`, `set-user-active`, `delete-task`, `delete-proposal`, `telegram-check`, `send-ceo-report` chay tay) tin `requesterId` trinh duyet tu khai → bat ky ai biet uuid TGD (moi tai khoan doc duoc bang `profiles`) goi thang API la doi mat khau / tao TGD / xoa du lieu, KHONG can dang nhap. `send-push` nhan `NEXT_PUBLIC_CRON_SECRET` (nam cong khai trong bundle). `generate-recurring` tin User-Agent `vercel-cron`. `check-deadlines` khong nhan Bearer (Vercel Cron gui Bearer → cron co the bi 401) va lot qua khi `CRON_SECRET` chua dat.
+- **Sua**: them `src/lib/apiAuth.js` (`requireStaff`, `isCronRequest`) + `src/lib/apiFetch.js`; 11 route doi sang xac thuc bang token / CRON_SECRET; 4 file phia trinh duyet (`AuthContext`, `AdminPanel`, `notify`, `deletions`) goi qua `apiFetch`, bo `requesterId`. Cung cach da lam o ban DTC (`longnguyen-89/taskflow-dtc`, deploy 17-11-2026).
+- **Phep thu**: `tests/` goi handler THAT voi Supabase gia. Ma moi 15/15 xanh; ma cu (`main` 68b46b7) do 14/15; 7/7 dot bien bi bat.
+- **Can biet khi deploy**: tab dang mo voi JS cu goi API se bi 401 toi khi tai lai trang (khong phai dang nhap lai). `NEXT_PUBLIC_CRON_SECRET` tren Vercel khong con duoc doc — xoa hay giu tuy Long.
+- **Git**: nhanh `va-api-xac-thuc`. CHUA push, CHUA deploy.
